@@ -250,6 +250,7 @@ For more detailed information, check the documentation in the `docs` folder:
 - [Getting Started](docs/getting-started.md)
 - [Installation Guide](docs/installation-guide.md)
 - [Command Reference](docs/command-reference.md)
+- [Tool Testing Guide](docs/testing-guide.md)
 - [Architecture](docs/architecture.md)
 - [Enhanced Features Guide](docs/enhanced-features.md) (NEW)
 

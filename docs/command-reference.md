@@ -2,6 +2,14 @@
 
 This document provides a reference for the commands available through the Godot MCP integration.
 
+## Table of Contents
+
+- [Node Tools](#node-tools)
+- [Script Tools](#script-tools)
+- [Editor Tools](#editor-tools)
+- [Scene Tools](#scene-tools)
+- [Using Commands with Claude](#using-commands-with-claude)
+
 ## Node Tools
 
 ### create_node
@@ -117,6 +125,27 @@ Generate a GDScript template with common boilerplate.
 ```
 Create a script template for a KinematicBody2D with process and input functions.
 ```
+
+## Editor Tools
+
+### execute_editor_script
+Execute arbitrary GDScript code directly in the Godot editor context.
+
+**Parameters:**
+- `code` - GDScript code to execute in the editor context
+
+**Example:**
+```
+Execute a script to find all nodes with "Player" in their name and print their paths.
+```
+
+**Use Cases:**
+- Batch operations on multiple nodes or assets
+- Running custom utility scripts without saving files
+- Testing code snippets and inspecting editor state
+- Automating repetitive editor tasks
+
+**Note:** Scripts run in the editor context with access to editor APIs and can modify the current scene, but don't run in the game runtime.
 
 ## Scene Tools
 

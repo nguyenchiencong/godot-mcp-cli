@@ -133,6 +133,16 @@ Implement this health system in my game.
 Show me all the images in my project and help me organize them better.
 ```
 
+```
+@mcp godot-mcp run execute_editor_script --code "
+for node in get_tree().get_nodes_in_group('enemies'):
+    node.set('health', 100)
+print('All enemy health reset to 100')
+"
+
+Reset all enemy nodes' health to 100.
+```
+
 ### Natural Language Tasks Claude Can Perform
 
 - "Create a main menu with play, options, and quit buttons"
@@ -184,6 +194,7 @@ Show me all the images in my project and help me organize them better.
 - `get-editor-state` - Gets current editor state
 - `run-project` - Runs the project
 - `stop-project` - Stops the running project
+- `execute_editor_script` - Executes arbitrary GDScript code in the Godot editor context
 
 #### Enhanced Commands (NEW)
 - `get_full_scene_tree` - Gets complete hierarchical scene structure

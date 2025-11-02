@@ -108,16 +108,42 @@ The server provides the following tools to Claude:
 - **create_script**: Create a new GDScript file
 - **edit_script**: Modify an existing script
 - **get_script**: Get a script's content
+- **execute_editor_script**: Execute arbitrary GDScript code in the Godot editor
 
 ### Resource Management
 
 - **create_resource**: Create a new resource
 - **list_resources**: List resources in a directory
 
+### Editor Tools
+
+- **execute_editor_script**: Execute arbitrary GDScript code directly in the Godot editor context
+
 ### Scene Management
 
 - **save_scene**: Save the current scene
 - **open_scene**: Open a scene file
+
+### execute_editor_script Tool
+
+The `execute_editor_script` tool allows you to run arbitrary GDScript code directly in the Godot editor context. This is particularly useful for:
+
+- **Batch Operations**: Perform complex operations on multiple nodes or assets at once
+- **Custom Utilities**: Run custom scripts that don't need to be saved as files
+- **Debugging**: Test code snippets and inspect editor state
+- **Automation**: Automate repetitive editor tasks
+
+**Example Usage:**
+```
+Execute a script to find all nodes with "Player" in their name and print their paths:
+```
+
+The tool returns:
+- Execution status
+- Any console output from the script
+- Return values or results from the script
+
+**Note**: Scripts run in the editor context, so they have access to editor APIs and can modify the current scene, but they don't run in the game runtime.
 
 ## Implementation Details
 

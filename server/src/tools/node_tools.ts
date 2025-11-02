@@ -38,7 +38,7 @@ export const nodeTools: MCPTool[] = [
     description: 'Create a new node in the Godot scene tree',
     parameters: z.object({
       parent_path: z.string()
-        .describe('Path to the parent node where the new node will be created (e.g. ".", "./MainScene")'),
+        .describe('Path to the parent node where the new node will be created (e.g. ".", "./UI")'),
       node_type: z.string()
         .describe('Type of node to create (e.g. "Node2D", "Sprite2D", "Label")'),
       node_name: z.string()
@@ -66,7 +66,7 @@ export const nodeTools: MCPTool[] = [
     description: 'Delete a node from the Godot scene tree',
     parameters: z.object({
       node_path: z.string()
-        .describe('Path to the node to delete (e.g. "./MainScene/Player")'),
+        .describe('Path to the node to delete (e.g. "./Player")'),
     }),
     execute: async ({ node_path }: DeleteNodeParams): Promise<string> => {
       const godot = getGodotConnection();
@@ -85,7 +85,7 @@ export const nodeTools: MCPTool[] = [
     description: 'Update a property of a node in the Godot scene tree',
     parameters: z.object({
       node_path: z.string()
-        .describe('Path to the node to update (e.g. "./MainScene/Player")'),
+        .describe('Path to the node to update (e.g. "./Player")'),
       property: z.string()
         .describe('Name of the property to update (e.g. "position", "text", "modulate")'),
       value: z.any()
@@ -113,7 +113,7 @@ export const nodeTools: MCPTool[] = [
     description: 'Get all properties of a node in the Godot scene tree',
     parameters: z.object({
       node_path: z.string()
-        .describe('Path to the node to inspect (e.g. "./MainScene/Player")'),
+        .describe('Path to the node to inspect (e.g. "./Player")'),
     }),
     execute: async ({ node_path }: GetNodePropertiesParams): Promise<string> => {
       const godot = getGodotConnection();
@@ -138,7 +138,7 @@ export const nodeTools: MCPTool[] = [
     description: 'List all child nodes under a parent node in the Godot scene tree',
     parameters: z.object({
       parent_path: z.string()
-        .describe('Path to the parent node (e.g. ".", "./MainScene")'),
+        .describe('Path to the parent node (e.g. ".", "./UI")'),
     }),
     execute: async ({ parent_path }: ListNodesParams): Promise<string> => {
       const godot = getGodotConnection();

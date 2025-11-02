@@ -61,18 +61,29 @@ func _get_editor_node(path: String) -> Node:
 	if not edited_scene_root:
 		print("No edited scene found")
 		return null
-		
-	# Handle absolute paths
-	if path == "/root" or path == "":
+
+	var normalized_path = _normalize_node_path(path)
+	if normalized_path.is_empty():
 		return edited_scene_root
-		
-	if path.begins_with("/root/"):
-		path = path.substr(6)  # Remove "/root/"
-	elif path.begins_with("/"):
-		path = path.substr(1)  # Remove leading "/"
-	
-	# Try to find node as child of edited scene root
-	return edited_scene_root.get_node_or_null(path)
+
+	var node = edited_scene_root.get_node_or_null(normalized_path)
+	if node:
+		return node
+
+	var root_name = edited_scene_root.name
+	if normalized_path == root_name:
+		return edited_scene_root
+
+	var root_prefix = root_name + "/"
+	if normalized_path.begins_with(root_prefix):
+		var trimmed_path = normalized_path.substr(root_prefix.length())
+		if trimmed_path.is_empty():
+			return edited_scene_root
+		node = edited_scene_root.get_node_or_null(trimmed_path)
+		if node:
+			return node
+
+	return null
 
 # Enhanced version of _get_editor_node to improve node path resolution
 func _get_editor_node_enhanced(path: String) -> Node:
@@ -92,27 +103,37 @@ func _get_editor_node_enhanced(path: String) -> Node:
 	if not edited_scene_root:
 		return null
 	
-	# Special case for main scene nodes with common names
-	if path == "/root/Game" or path == "/root/game" or path == "/root/Main" or path == "/root/main":
-		var node_name = path.get_file().to_lower()
-		if edited_scene_root.name.to_lower() == node_name:
+	var normalized_path = _normalize_node_path(path)
+	if normalized_path.is_empty():
+		return edited_scene_root
+
+	var lower_path = normalized_path.to_lower()
+	var root_name_lower = edited_scene_root.name.to_lower()
+
+	if lower_path == root_name_lower:
+		return edited_scene_root
+
+	var parts = normalized_path.split("/")
+	if parts.size() > 1 and parts[0].to_lower() == root_name_lower:
+		var sub_path = ""
+		for i in range(1, parts.size()):
+			if i > 1:
+				sub_path += "/"
+			sub_path += parts[i]
+		
+		if sub_path.is_empty():
 			return edited_scene_root
 		
-		# Try to find the node as a child of root if it's not the root itself
-		for child in edited_scene_root.get_children():
-			if child.name.to_lower() == node_name:
-				return child
-	
-	# Try case-insensitive match for first level children
-	var simplified_path = path
-	if path.begins_with("/root/"):
-		simplified_path = path.substr(6)  # Remove "/root/"
-	elif path.begins_with("/"):
-		simplified_path = path.substr(1)  # Remove leading "/"
+		var node_with_root_prefix = edited_scene_root.get_node_or_null(sub_path)
+		if node_with_root_prefix:
+			return node_with_root_prefix
 		
-	if simplified_path.find("/") == -1:
+		normalized_path = sub_path
+		lower_path = normalized_path.to_lower()
+	
+	if normalized_path.find("/") == -1:
 		for child in edited_scene_root.get_children():
-			if child.name.to_lower() == simplified_path.to_lower():
+			if child.name.to_lower() == lower_path:
 				return child
 	
 	return null
@@ -175,7 +196,26 @@ func _parse_property_value(value):
 			else:
 				print("Failed to execute expression for: %s" % value)
 		else:
-			print("Failed to parse expression: %s (Error: %d)" % [value, error])
+				print("Failed to parse expression: %s (Error: %d)" % [value, error])
 	
 	# Otherwise, return value as is
 	return value
+
+func _normalize_node_path(path: String) -> String:
+	var normalized = path.strip_edges()
+	if normalized.is_empty() or normalized == "." or normalized == "/root":
+		return ""
+	
+	while normalized.begins_with("/root/"):
+		normalized = normalized.substr(6)
+	
+	while normalized.begins_with("./"):
+		normalized = normalized.substr(2)
+	
+	if normalized.begins_with("/"):
+		normalized = normalized.substr(1)
+	
+	if normalized.begins_with("."):
+		normalized = normalized.substr(1)
+	
+	return normalized.strip_edges()

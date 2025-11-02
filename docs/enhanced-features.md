@@ -101,7 +101,7 @@ Easily update position, rotation, and scale of nodes with a single command.
 ### Usage
 
 ```
-@mcp godot-mcp run update_node_transform --node_path "./MainScene/Player" --position [100, 200] --rotation 1.5 --scale [2, 2]
+@mcp godot-mcp run update_node_transform --node_path "./Player" --position [100, 200] --rotation 1.5 --scale [2, 2]
 ```
 
 ### Example Use Cases

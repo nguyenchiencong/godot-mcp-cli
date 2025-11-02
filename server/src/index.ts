@@ -16,10 +16,9 @@ import {
   fullSceneTreeResource
 } from './resources/scene_resources.js';
 import {
-  scriptResource,
   scriptListResource,
-  scriptMetadataResource,
-  scriptByPathResourceTemplate
+  scriptByPathResourceTemplate,
+  scriptMetadataResourceTemplate
 } from './resources/script_resources.js';
 import {
   projectStructureResource,
@@ -72,12 +71,11 @@ async function main() {
   server.addResource(selectedNodeResource);
   server.addResource(currentScriptResource);
   server.addResource(sceneStructureResource);
-  server.addResource(scriptResource);
-  server.addResource(scriptMetadataResource);
   server.addResource(fullSceneTreeResource);
   server.addResource(debugOutputResource);
   server.addResource(assetListResource);
   server.addResourceTemplate(scriptByPathResourceTemplate);
+  server.addResourceTemplate(scriptMetadataResourceTemplate);
   server.addResourceTemplate(assetByTypeResourceTemplate);
 
   console.error('All resources and tools registered');

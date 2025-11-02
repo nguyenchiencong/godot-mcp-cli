@@ -79,7 +79,9 @@ Access any script in your project directly by path, making it easy to read and m
 ### Resource Endpoints
 
 - `godot://script/{path}` - Read any script by path
-- `godot://script/{path}/write` - Write to any script by path
+- `godot://script/{path}/metadata` - Fetch metadata (class name, methods, signals) for a script
+
+Use the `edit_script` tool when you need to write changes back to disk.
 
 ### Usage
 
@@ -88,7 +90,7 @@ Access any script in your project directly by path, making it easy to read and m
 ```
 
 ```
-@mcp godot-mcp write godot://script/res://scripts/player.gd
+@mcp godot-mcp read godot://script/res://scripts/player.gd/metadata
 ```
 
 ### Example Use Cases

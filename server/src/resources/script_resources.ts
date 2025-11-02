@@ -1,45 +1,6 @@
 import { Resource, ResourceTemplate } from 'fastmcp';
 import { getGodotConnection } from '../utils/godot_connection.js';
 
-interface ScriptContent {
-  text: string;
-  metadata?: {
-    path: string;
-    language: string;
-    [key: string]: any;
-  };
-}
-
-/**
- * Resource that provides script content
- */
-export const scriptResource: Resource = {
-  uri: 'godot/script',
-  name: 'Script Content',
-  mimeType: 'text/plain',
-  async load() {
-    const godot = getGodotConnection();
-    try {
-      const scriptPath = 'res://default_script.gd';
-      const result = await godot.sendCommand('get_script', {
-        path: scriptPath
-      });
-      
-      return {
-        text: result.content,
-        metadata: {
-          path: result.script_path,
-          language: scriptPath.endsWith('.gd') ? 'gdscript' : 
-                  scriptPath.endsWith('.cs') ? 'csharp' : 'unknown'
-        }
-      };
-    } catch (error) {
-      console.error('Error fetching script content:', error);
-      throw error;
-    }
-  }
-};
-
 /**
  * Resource for script list
  */
@@ -75,31 +36,6 @@ export const scriptListResource: Resource = {
       }
     } catch (error) {
       console.error('Error fetching script list:', error);
-      throw error;
-    }
-  }
-};
-
-/**
- * Resource for script metadata
- */
-export const scriptMetadataResource: Resource = {
-  uri: 'godot/script/metadata',
-  name: 'Script Metadata',
-  mimeType: 'application/json',
-  async load() {
-    const godot = getGodotConnection();
-    try {
-      const scriptPath = 'res://default_script.gd';
-      const result = await godot.sendCommand('get_script_metadata', {
-        path: scriptPath
-      });
-      
-      return {
-        text: JSON.stringify(result)
-      };
-    } catch (error) {
-      console.error('Error fetching script metadata:', error);
       throw error;
     }
   }
@@ -147,6 +83,51 @@ export const scriptByPathResourceTemplate: ResourceTemplate = {
       };
     } catch (error) {
       console.error('Error fetching script content by path:', error);
+      throw error;
+    }
+  }
+};
+
+/**
+ * Template resource for retrieving script metadata by path.
+ */
+export const scriptMetadataResourceTemplate: ResourceTemplate = {
+  uriTemplate: 'godot/script/{path}/metadata',
+  name: 'Script Metadata By Path',
+  mimeType: 'application/json',
+  arguments: [
+    {
+      name: 'path',
+      description: 'Path to the script (e.g. res://scripts/player.gd)'
+    }
+  ],
+  async load({ path }) {
+    const godot = getGodotConnection();
+    try {
+      if (!path || path.trim() === '') {
+        throw new Error('Script path must be provided for metadata lookup.');
+      }
+
+      let normalizedPath = path.trim();
+      if (!normalizedPath.startsWith('res://')) {
+        normalizedPath = `res://${normalizedPath}`;
+      }
+
+      const result = await godot.sendCommand('get_script_metadata', { path: normalizedPath });
+
+      if (!result) {
+        throw new Error(`Metadata not available for ${normalizedPath}`);
+      }
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      return {
+        text: JSON.stringify(result)
+      };
+    } catch (error) {
+      console.error('Error fetching script metadata by path:', error);
       throw error;
     }
   }

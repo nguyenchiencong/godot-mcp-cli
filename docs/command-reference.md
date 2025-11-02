@@ -8,6 +8,8 @@ This document provides a reference for the commands available through the Godot 
 - [Script Tools](#script-tools)
 - [Editor Tools](#editor-tools)
 - [Scene Tools](#scene-tools)
+- [Asset Tools](#asset-tools)
+- [Enhanced Tools](#enhanced-tools)
 - [Using Commands with Claude](#using-commands-with-claude)
 
 ## Node Tools
@@ -223,6 +225,61 @@ Create a new resource in the project.
 **Example:**
 ```
 Create a StyleBoxFlat resource at "res://resources/button_style.tres" with a blue background color.
+```
+
+## Asset Tools
+
+### list_assets_by_type
+List every asset of a specific type in the project.
+
+**Parameters:**
+- `type` - Asset category to list (`images`, `audio`, `fonts`, `models`, `shaders`, `resources`, or `all`)
+
+**Behavior:**
+- Returns a summary line, followed by the full list of matching asset paths.
+
+**Example:**
+```
+List all image assets in the project so I can audit the art pipeline.
+```
+
+### list_project_files
+List project files that match a set of extensions.
+
+**Parameters:**
+- `extensions` (optional) - Array of extensions to filter by (e.g. `[".tscn", ".gd"]`). Leave empty to list every file.
+
+**Behavior:**
+- Returns a summary line, followed by the full list of matching file paths.
+
+**Example:**
+```
+Show me every *.tscn file in the project.
+```
+
+## Enhanced Tools
+
+### get_editor_scene_structure
+Return the current scene hierarchy with optional detail flags.
+
+**Parameters:**
+- `include_properties` (optional, default `false`) - Include editor-visible properties such as position/rotation
+- `include_scripts` (optional, default `false`) - Include attached script metadata
+- `max_depth` (optional) - Limit traversal depth (`0` = only root)
+
+**Example:**
+```
+Dump the entire scene tree including properties so I can review the layout.
+```
+
+### get_debug_output
+Fetch the Godot editor's debug console output.
+
+**Parameters:** None
+
+**Example:**
+```
+Show me the latest debug logs from the editor.
 ```
 
 ## Using Commands with Claude

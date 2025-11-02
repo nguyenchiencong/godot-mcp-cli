@@ -121,6 +121,12 @@ Please analyze this player script and suggest improvements.
 ```
 
 ```
+@mcp godot-mcp read godot://script/res://scripts/player.gd/metadata
+
+What signals and helper methods does this script expose?
+```
+
+```
 @mcp godot-mcp read godot://assets/images
 
 List every image asset so I can review what art is already in the project.
@@ -157,6 +163,7 @@ Reset all enemy nodes' health to 100.
 ### Resource Endpoints:
 - `godot://script/current` - The currently open script
 - `godot://script/{path}` - Any script by path (NEW)
+- `godot://script/{path}/metadata` - Metadata (class, methods, signals) for a specific script (NEW)
 - `godot://scene/current` - The currently open scene
 - `godot://scene/tree` - Complete scene tree hierarchy (NEW)
 - `godot://project/info` - Project metadata and settings

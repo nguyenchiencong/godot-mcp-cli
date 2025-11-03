@@ -10,6 +10,7 @@ shapes/
 collision/
 environment/
 materials/
+*.uid
 
 # Imported translations (automatically generated from CSV files)
 *.translation
@@ -43,3 +44,7 @@ __pycache__/
 .~lock.*
 
 .vscode/
+TRASH.md
+CLAUDE.md
+AGENTS.md
+examples/

@@ -14,15 +14,15 @@ func _enter_tree():
 	Engine.set_meta("GodotMCPPlugin", self)
 	_runtime_bridge_warning_logged = false
 	_try_register_runtime_bridge()
-	
+
 	print("\n=== MCP SERVER STARTING ===")
-	
+
 	# Initialize the websocket server
 	websocket_server = load("res://addons/godot_mcp/websocket_server.gd").new()
 	websocket_server.name = "WebSocketServer"
 	add_child(websocket_server)
 	websocket_server.connect("client_disconnected", Callable(self, "_on_client_disconnected"))
-	
+
 	# Initialize the command handler
 	print("Creating command handler...")
 	var handler_script = load("res://addons/godot_mcp/command_handler.gd")
@@ -31,13 +31,13 @@ func _enter_tree():
 		command_handler.set_script(handler_script)
 		command_handler.name = "CommandHandler"
 		websocket_server.add_child(command_handler)
-		
+
 		# Connect signals
 		print("Connecting command handler signals...")
 		websocket_server.connect("command_received", Callable(command_handler, "_handle_command"))
 	else:
 		printerr("Failed to load command handler script!")
-	
+
 	# Initialize the control panel
 	panel = load("res://addons/godot_mcp/ui/mcp_panel.tscn").instantiate()
 	panel.websocket_server = websocket_server
@@ -51,7 +51,12 @@ func _enter_tree():
 		debug_output_publisher.websocket_server = websocket_server
 		add_child(debug_output_publisher)
 		Engine.set_meta("MCPDebugOutputPublisher", debug_output_publisher)
-	
+
+	# Start the MCP websocket server automatically when the plugin loads
+	var start_result := websocket_server.start_server()
+	if start_result != OK and start_result != ERR_ALREADY_IN_USE:
+		printerr("Failed to start MCP websocket server automatically: %d" % start_result)
+
 	print("MCP Server plugin initialized")
 
 func _exit_tree():
@@ -63,11 +68,11 @@ func _exit_tree():
 	if Engine.has_meta("MCPDebugOutputPublisher"):
 		Engine.remove_meta("MCPDebugOutputPublisher")
 	_update_debugger_captures(false)
-	
+
 	if runtime_debugger_bridge:
 		remove_debugger_plugin(runtime_debugger_bridge)
 		runtime_debugger_bridge = null
-	
+
 	# Clean up the panel
 	if panel:
 		remove_control_from_bottom_panel(panel)
@@ -78,13 +83,13 @@ func _exit_tree():
 		debug_output_publisher.unsubscribe_all()
 		debug_output_publisher.queue_free()
 		debug_output_publisher = null
-	
+
 	# Clean up the websocket server and command handler
 	if websocket_server:
 		websocket_server.stop_server()
 		websocket_server.queue_free()
 		websocket_server = null
-	
+
 	print("=== MCP SERVER SHUTDOWN ===")
 
 # Helper function for command processors to access EditorInterface
@@ -98,27 +103,27 @@ func get_undo_redo():
 func _try_register_runtime_bridge() -> bool:
 	if runtime_debugger_bridge:
 		return true
-	
+
 	var runtime_bridge_script = load("res://addons/godot_mcp/mcp_runtime_debugger_bridge.gd")
 	if not runtime_bridge_script:
 		if not _runtime_bridge_warning_logged:
 			_runtime_bridge_warning_logged = true
 			print("Godot MCP runtime scene inspection unavailable (bridge script not found).")
 		return false
-	
+
 	if not ClassDB.class_exists("EditorDebuggerPlugin"):
 		if not _runtime_bridge_warning_logged:
 			_runtime_bridge_warning_logged = true
 			print("Godot MCP runtime scene inspection unavailable on this editor version.")
 		return false
-	
+
 	var runtime_bridge_instance = runtime_bridge_script.new()
 	if runtime_bridge_instance == null:
 		if not _runtime_bridge_warning_logged:
 			_runtime_bridge_warning_logged = true
 			print("Godot MCP runtime scene inspection disabled (bridge instantiation failed).")
 		return false
-	
+
 	runtime_debugger_bridge = runtime_bridge_instance
 	add_debugger_plugin(runtime_debugger_bridge)
 	Engine.set_meta("MCPRuntimeDebuggerBridge", runtime_debugger_bridge)

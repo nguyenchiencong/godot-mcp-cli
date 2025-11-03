@@ -4,10 +4,15 @@ extends EditorPlugin
 var websocket_server: MCPWebSocketServer
 var command_handler = null  # Command handler reference
 var panel = null  # Reference to the MCP panel
+var runtime_debugger_bridge = null  # Runtime scene inspection bridge
+var _runtime_bridge_warning_logged := false
+const SCENE_CAPTURE_NAMES := ["scene", "limboai"]
 
 func _enter_tree():
 	# Store plugin instance for EditorInterface access
 	Engine.set_meta("GodotMCPPlugin", self)
+	_runtime_bridge_warning_logged = false
+	_try_register_runtime_bridge()
 	
 	print("\n=== MCP SERVER STARTING ===")
 	
@@ -42,6 +47,13 @@ func _exit_tree():
 	# Remove plugin instance from Engine metadata
 	if Engine.has_meta("GodotMCPPlugin"):
 		Engine.remove_meta("GodotMCPPlugin")
+	if Engine.has_meta("MCPRuntimeDebuggerBridge"):
+		Engine.remove_meta("MCPRuntimeDebuggerBridge")
+	_update_debugger_captures(false)
+	
+	if runtime_debugger_bridge:
+		remove_debugger_plugin(runtime_debugger_bridge)
+		runtime_debugger_bridge = null
 	
 	# Clean up the panel
 	if panel:
@@ -64,3 +76,52 @@ func get_editor_interface():
 # Helper function for command processors to get undo/redo manager
 func get_undo_redo():
 	return get_undo_redo()
+
+func _try_register_runtime_bridge() -> bool:
+	if runtime_debugger_bridge:
+		return true
+	
+	var runtime_bridge_script = load("res://addons/godot_mcp/mcp_runtime_debugger_bridge.gd")
+	if not runtime_bridge_script:
+		if not _runtime_bridge_warning_logged:
+			_runtime_bridge_warning_logged = true
+			print("Godot MCP runtime scene inspection unavailable (bridge script not found).")
+		return false
+	
+	if not ClassDB.class_exists("EditorDebuggerPlugin"):
+		if not _runtime_bridge_warning_logged:
+			_runtime_bridge_warning_logged = true
+			print("Godot MCP runtime scene inspection unavailable on this editor version.")
+		return false
+	
+	var runtime_bridge_instance = runtime_bridge_script.new()
+	if runtime_bridge_instance == null:
+		if not _runtime_bridge_warning_logged:
+			_runtime_bridge_warning_logged = true
+			print("Godot MCP runtime scene inspection disabled (bridge instantiation failed).")
+		return false
+	
+	runtime_debugger_bridge = runtime_bridge_instance
+	add_debugger_plugin(runtime_debugger_bridge)
+	Engine.set_meta("MCPRuntimeDebuggerBridge", runtime_debugger_bridge)
+	_update_debugger_captures(true)
+	_runtime_bridge_warning_logged = false
+	print("Godot MCP runtime scene inspection enabled.")
+	return true
+
+func _update_debugger_captures(enable: bool) -> void:
+	if not Engine.has_singleton("EngineDebugger"):
+		return
+	var engine_debugger = Engine.get_singleton("EngineDebugger")
+	if engine_debugger == null:
+		return
+	if not engine_debugger.has_method("set_capture"):
+		return
+	var has_query := engine_debugger.has_method("has_capture")
+	for name in SCENE_CAPTURE_NAMES:
+		if enable:
+			if not has_query or not engine_debugger.has_capture(name):
+				engine_debugger.set_capture(name, true)
+		else:
+			if not has_query or engine_debugger.has_capture(name):
+				engine_debugger.set_capture(name, false)

@@ -6,6 +6,7 @@ A comprehensive integration between Godot Engine and AI assistants using the Mod
 
 - **Full Godot Project Access**: AI assistants can access and modify scripts, scenes, nodes, and project resources.
 - **Flexible Scene Inspection**: Retrieve the current hierarchy with `get_editor_scene_structure`, including optional properties, scripts, and depth limits.
+- **Runtime Scene Inspection**: Snapshot the live scene tree from the running game with `get_runtime_scene_structure`.
 - **Dynamic Script Access**: Read any script via `godot://script/{path}` and fetch metadata using `godot://script/{path}/metadata`.
 - **Script Editing Tools**: Create, edit, or template scripts directly through MCP commands.
 - **Node Management**: Create, remove, list, and inspect nodes with automatic path normalization.
@@ -195,6 +196,7 @@ Reset all enemy nodes' health to 100.
 
 #### Enhanced Commands (NEW)
 - `get_editor_scene_structure` - Returns the current scene hierarchy with optional `include_properties`, `include_scripts`, and `max_depth` filters
+- `get_runtime_scene_structure` - Returns the runtime scene hierarchy from the running game (requires active debugger session)
 - `get_debug_output` - Retrieves debug logs from editor
 - `update_node_transform` - Updates node position, rotation, and scale
 - `list_assets_by_type` - Lists project assets by type

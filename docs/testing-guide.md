@@ -142,6 +142,14 @@ All examples assume:
   ```
 - **Expected Outcome**: Recent editor log output or a message noting that no output is available.
 
+### get_runtime_scene_structure
+- **Setup**: Run the project (or attach the debugger) so that a runtime session is active.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run get_runtime_scene_structure --max_depth 1 --timeout_ms 1200
+  ```
+- **Expected Outcome**: Summary including the runtime scene path and root, followed by the live scene tree. If the project is not running, an informative error is returned.
+
 ---
 
 ## Resource Templates

@@ -249,9 +249,9 @@ Show me every *.tscn file in the project.
 Return the current scene hierarchy with optional detail flags.
 
 **Parameters:**
-- `include_properties` (optional, default `false`) – include editor-visible properties such as position/rotation.
-- `include_scripts` (optional, default `false`) – include attached script metadata for each node.
-- `max_depth` (optional) – limit recursion depth (`0` = only root).
+- `include_properties` (optional, default `false`) - include editor-visible properties such as position/rotation.
+- `include_scripts` (optional, default `false`) - include attached script metadata for each node.
+- `max_depth` (optional) - limit recursion depth (`0` = only root).
 
 **Command Details**
 ```typescript
@@ -284,6 +284,34 @@ Return the current scene hierarchy with optional detail flags.
 - Audit scene layout before making structural edits.
 - Generate summaries for documentation or code review.
 - Quickly locate nodes or scripts in complex projects.
+
+### get_runtime_scene_structure
+Return the live scene hierarchy from the running game (via the remote debugger).
+
+**Parameters:**
+- `include_properties` (optional, default `false`) - attempt to include common properties (when available).
+- `include_scripts` (optional, default `false`) - reserve script metadata (currently informational only).
+- `max_depth` (optional) - limit recursion depth (`0` = only root).
+- `timeout_ms` (optional, default `800`) - how long to wait for a runtime snapshot (100–5000 ms).
+
+**Usage**
+```
+@mcp godot-mcp run get_runtime_scene_structure
+```
+
+```
+@mcp godot-mcp run get_runtime_scene_structure --max_depth 1 --timeout_ms 1200
+```
+
+**Response Contains**
+- `scene_path`, `root_node_name`, `root_node_type`, `runtime`.
+- `structure`: nested hierarchy with `name`, `type`, `path`, `object_id`, `scene_file_path`, and `visibility`.
+- Optional warnings when a requested detail (scripts/properties) is not yet exposed.
+
+**Use Cases**
+- Compare the edited scene with the runtime instance to find dynamically spawned nodes.
+- Diagnose objects that appear or disappear only while the project is running.
+- Capture live hierarchy snapshots during automated debugging sessions.
 
 ### get_debug_output
 Fetch the Godot editor's debug console output.

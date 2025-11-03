@@ -1,13 +1,14 @@
 @tool
 class_name MCPEnhancedCommands
-extends Node
-
-var _websocket_server = null
+extends MCPBaseCommandProcessor
 
 func process_command(client_id: int, command_type: String, params: Dictionary, command_id: String) -> bool:
 	match command_type:
 		"get_editor_scene_structure":
 			_handle_get_editor_scene_structure(client_id, params, command_id)
+			return true
+		"get_runtime_scene_structure":
+			_handle_get_runtime_scene_structure(client_id, params, command_id)
 			return true
 		"get_debug_output":
 			_handle_get_debug_output(client_id, params, command_id)
@@ -26,12 +27,62 @@ func _get_editor_interface():
 		return plugin_instance.get_editor_interface()
 	return null
 
+func _get_runtime_bridge() -> MCPRuntimeDebuggerBridge:
+	if Engine.has_meta("MCPRuntimeDebuggerBridge"):
+		return Engine.get_meta("MCPRuntimeDebuggerBridge") as MCPRuntimeDebuggerBridge
+	return null
+
 # ---- Scene Structure Commands ----
 
 func _handle_get_editor_scene_structure(client_id: int, params: Dictionary, command_id: String) -> void:
 	var options = _build_scene_options(params, false, false)
 	var result = _build_scene_structure_result(options)
 	_send_success(client_id, result, command_id)
+
+func _handle_get_runtime_scene_structure(client_id: int, params: Dictionary, command_id: String) -> void:
+	var runtime_bridge := _get_runtime_bridge()
+	if runtime_bridge == null:
+		_send_success(client_id, { "error": "Runtime debugger bridge not available. Ensure the project is running." }, command_id)
+		return
+	
+	var options = _build_scene_options(params, false, false)
+	var timeout_ms = params.get("timeout_ms", MCPRuntimeDebuggerBridge.DEFAULT_TIMEOUT_MS)
+	timeout_ms = int(timeout_ms)
+	if timeout_ms < 100:
+		timeout_ms = 100
+	elif timeout_ms > 5000:
+		timeout_ms = 5000
+	
+	var request_info = runtime_bridge.request_runtime_scene_snapshot()
+	if request_info.has("error"):
+		_send_success(client_id, request_info, command_id)
+		return
+
+	var session_id: int = request_info.get("session_id", -1)
+	var baseline_version: int = request_info.get("baseline_version", 0)
+	var scene_tree := get_tree()
+	if scene_tree == null:
+		_send_success(client_id, { "error": "Scene tree unavailable for runtime polling." }, command_id)
+		return
+
+	var deadline: int = Time.get_ticks_msec() + timeout_ms
+	var snapshot: Dictionary = {}
+
+	while Time.get_ticks_msec() <= deadline:
+		if runtime_bridge.has_new_runtime_snapshot(session_id, baseline_version):
+			snapshot = runtime_bridge.build_runtime_snapshot(session_id, options)
+			if not snapshot.is_empty():
+				break
+		
+		await scene_tree.process_frame
+
+	if snapshot.is_empty():
+		snapshot = {
+			"error": "Timed out waiting for runtime scene data.",
+			"hint": "Ensure the remote debugger supports scene tree capture; try opening the Remote Scene tab in Godot or enabling EngineDebugger.set_capture('scene', true) inside the running project."
+		}
+
+	_send_success(client_id, snapshot, command_id)
 
 func _build_scene_structure_result(options: Dictionary) -> Dictionary:
 	var editor_interface = _get_editor_interface()
@@ -216,15 +267,3 @@ func update_node_transform(node_path: String, position, rotation, scale) -> Dict
 			"scale": scale != null
 		}
 	}
-
-# Helper function to send success response
-func _send_success(client_id: int, result: Dictionary, command_id: String) -> void:
-	var response = {
-		"status": "success",
-		"result": result
-	}
-	
-	if not command_id.is_empty():
-		response["commandId"] = command_id
-	
-	_websocket_server.send_response(client_id, response)

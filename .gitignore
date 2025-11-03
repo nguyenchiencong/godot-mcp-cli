@@ -10,7 +10,6 @@ shapes/
 collision/
 environment/
 materials/
-*.uid
 
 # Imported translations (automatically generated from CSV files)
 *.translation

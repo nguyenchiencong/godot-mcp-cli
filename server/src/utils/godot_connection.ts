@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import { EventEmitter } from 'events';
 
 export interface GodotResponse {
   status: 'success' | 'error';
@@ -13,7 +14,7 @@ export interface GodotCommand {
   commandId: string;
 }
 
-export class GodotConnection {
+export class GodotConnection extends EventEmitter {
   private ws: WebSocket | null = null;
   private connected = false;
   private reconnecting = false;
@@ -30,6 +31,7 @@ export class GodotConnection {
     private maxRetries: number = 3,
     private retryDelay: number = 2000
   ) {
+    super();
     console.error('GodotConnection created with URL:', this.url);
   }
 
@@ -81,6 +83,10 @@ export class GodotConnection {
                   pendingCommand.reject(new Error(response.message || 'Unknown error'));
                 }
               }
+            } else if ('event' in response) {
+              const eventName = (response as any).event;
+              const payload = (response as any).data ?? response;
+              this.emit(eventName, payload);
             }
           } catch (error) {
             console.error('Error parsing response:', error);

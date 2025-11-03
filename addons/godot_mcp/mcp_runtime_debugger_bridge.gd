@@ -3,18 +3,23 @@ class_name MCPRuntimeDebuggerBridge
 extends EditorDebuggerPlugin
 
 signal scene_tree_updated(session_id: int)
+signal runtime_eval_completed(session_id: int, request_id: int)
 
 const CAPTURE_SCENE := "scene"
 const VIEW_HAS_VISIBLE_METHOD := 1 << 1
 const VIEW_VISIBLE := 1 << 2
 const VIEW_VISIBLE_IN_TREE := 1 << 3
 const DEFAULT_TIMEOUT_MS := 800
+const DEFAULT_EVAL_TIMEOUT_MS := 800
 const SCENE_CAPTURE_NAMES := ["scene", "limboai"]
+const EVAL_CAPTURE_NAME := "mcp_eval"
 
 var _sessions: Dictionary = {}
+var _next_eval_request_id: int = 1
 
 func _init() -> void:
 	_sessions.clear()
+	_next_eval_request_id = 1
 
 func _setup_session(session_id: int) -> void:
 	_trace("setup_session %s" % session_id)
@@ -45,6 +50,9 @@ func _capture(message: String, data: Array, session_id: int) -> bool:
 			return false
 		_trace("storing scene tree for session %s (size=%s)" % [session_id, data.size()])
 		_store_scene_tree(session_id, data)
+	elif normalized == "%s:result" % EVAL_CAPTURE_NAME:
+		_trace("received runtime eval result for session %s" % session_id)
+		_store_eval_result(session_id, data)
 	return false
 
 func request_runtime_scene_snapshot() -> Dictionary:
@@ -77,6 +85,66 @@ func build_runtime_snapshot(session_id: int, options: Dictionary = {}) -> Dictio
 	if not state.get("tree"):
 		return {}
 	return _build_response(state["tree"], options)
+
+func evaluate_runtime_expression(expression: String, options: Dictionary = {}) -> Dictionary:
+	var trimmed := expression.strip_edges()
+	if trimmed.is_empty():
+		return { "error": "Expression cannot be empty." }
+
+	var active_sessions := _get_active_session_ids()
+	if active_sessions.is_empty():
+		return { "error": "No active runtime session. Start the project or attach the debugger first." }
+
+	var session_id: int = active_sessions[0]
+	_ensure_session(session_id)
+	var session := get_session(session_id)
+	if session == null or not session.is_active():
+		return { "error": "Runtime debugger session is not active." }
+
+	var request_id: int = _next_eval_request_id
+	_next_eval_request_id += 1
+
+	var payload := Array()
+	payload.append(request_id)
+	payload.append(trimmed)
+	if typeof(options) == TYPE_DICTIONARY:
+		payload.append(options.duplicate(true))
+	else:
+		payload.append({})
+
+	_trace("sending runtime eval request %s to session %s" % [request_id, session_id])
+	session.send_message("%s:evaluate" % EVAL_CAPTURE_NAME, payload)
+
+	return {
+		"session_id": session_id,
+		"request_id": request_id
+	}
+
+func has_eval_result(session_id: int, request_id: int) -> bool:
+	if not _sessions.has(session_id):
+		return false
+	var state: Dictionary = _sessions[session_id]
+	var results: Dictionary = state.get("eval_results", {})
+	return results.has(request_id)
+
+func take_eval_result(session_id: int, request_id: int) -> Dictionary:
+	if not _sessions.has(session_id):
+		return {}
+	var state: Dictionary = _sessions[session_id]
+	var results: Dictionary = state.get("eval_results", {})
+	if not results.has(request_id):
+		return {}
+	var payload: Variant = results[request_id]
+	results.erase(request_id)
+	state["eval_results"] = results
+	_sessions[session_id] = state
+
+	var response := {}
+	if typeof(payload) == TYPE_DICTIONARY:
+		response = payload.duplicate(true)
+		if response.has("_received_at"):
+			response.erase("_received_at")
+	return response
 
 func _get_active_session_ids() -> Array:
 	var result: Array = []
@@ -119,6 +187,50 @@ func _store_scene_tree(session_id: int, payload: Array) -> void:
 	_sessions[session_id] = state
 
 	scene_tree_updated.emit(session_id)
+
+func _store_eval_result(session_id: int, payload: Array) -> void:
+	_ensure_session(session_id)
+	if payload.is_empty():
+		_trace("runtime eval payload empty")
+		return
+
+	var entry: Variant = payload[0]
+	if typeof(entry) != TYPE_DICTIONARY:
+		_trace("runtime eval payload not dictionary")
+		return
+
+	var result_dict: Dictionary = entry.duplicate(true)
+	var request_id := int(result_dict.get("request_id", -1))
+	if request_id < 0:
+		_trace("runtime eval payload missing request_id")
+		return
+
+	if result_dict.has("output"):
+		var raw_output = result_dict["output"]
+		var normalized_output: Array = []
+		if typeof(raw_output) == TYPE_ARRAY:
+			for item in raw_output:
+				normalized_output.append(str(item))
+		elif typeof(raw_output) == TYPE_PACKED_STRING_ARRAY:
+			for item in raw_output:
+				normalized_output.append(str(item))
+		elif raw_output == null:
+			pass
+		else:
+			normalized_output.append(str(raw_output))
+		result_dict["output"] = normalized_output
+	else:
+		result_dict["output"] = []
+
+	result_dict["_received_at"] = Time.get_ticks_msec()
+
+	var state: Dictionary = _sessions.get(session_id, {})
+	var results: Dictionary = state.get("eval_results", {})
+	results[request_id] = result_dict
+	state["eval_results"] = results
+	_sessions[session_id] = state
+
+	runtime_eval_completed.emit(session_id, request_id)
 
 func _parse_remote_tree(flat_data: Array) -> Dictionary:
 	if flat_data.size() % 6 != 0:
@@ -236,7 +348,8 @@ func _ensure_session(session_id: int) -> void:
 			"tree": null,
 			"tree_version": 0,
 			"last_update": 0,
-			"active": false
+			"active": false,
+			"eval_results": {}
 		}
 
 func _on_session_started(session_id: int) -> void:
@@ -267,7 +380,10 @@ func _normalize_capture_name(message: String) -> String:
 			var suffix := message.substr(needle.length())
 			if suffix == "scene_tree":
 				return "scene:scene_tree"
-			break
+			return "%s:%s" % [prefix, suffix]
+	if message.begins_with("%s:" % EVAL_CAPTURE_NAME):
+		var eval_suffix := message.substr(EVAL_CAPTURE_NAME.length() + 1)
+		return "%s:%s" % [EVAL_CAPTURE_NAME, eval_suffix]
 	if message.ends_with(":scene_tree"):
 		return "scene:scene_tree"
 	return message

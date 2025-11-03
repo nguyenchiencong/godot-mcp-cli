@@ -292,7 +292,7 @@ Return the live scene hierarchy from the running game (via the remote debugger).
 - `include_properties` (optional, default `false`) - attempt to include common properties (when available).
 - `include_scripts` (optional, default `false`) - reserve script metadata (currently informational only).
 - `max_depth` (optional) - limit recursion depth (`0` = only root).
-- `timeout_ms` (optional, default `800`) - how long to wait for a runtime snapshot (100–5000 ms).
+- `timeout_ms` (optional, default `800`) - how long to wait for a runtime snapshot (100-5000 ms).
 
 **Usage**
 ```
@@ -313,8 +313,39 @@ Return the live scene hierarchy from the running game (via the remote debugger).
 - Diagnose objects that appear or disappear only while the project is running.
 - Capture live hierarchy snapshots during automated debugging sessions.
 
+### evaluate_runtime
+Evaluate a single GDScript expression against the running game through the remote debugger.
+
+> Warning: Requires the sample autoload (`runtime_scene_publisher_limboai.gd`) or another script that registers `EngineDebugger.register_message_capture("mcp_eval", ...)` in the running project.
+
+**Parameters:**
+- `expression` - The expression to evaluate. Runs with the resolved node as `self`.
+- `context_path` (optional) - Node path (e.g. `"/root/Main/Player"`) to resolve `self` for the expression. Defaults to the current scene root.
+- `capture_prints` (optional, default `true`) - Include any `print()` output produced by the expression.
+- `timeout_ms` (optional, default `800`) - How long to wait for the debugger response (100-5000 ms).
+
+**Usage**
+```
+@mcp godot-mcp run evaluate_runtime --expression "health"
+```
+
+```
+@mcp godot-mcp run evaluate_runtime --expression "print(position); velocity.length()" --context_path "/root/Main/Player" --timeout_ms 1200
+```
+
+**Response Contains**
+- `success` - Whether the expression executed without runtime errors.
+- `result` - The evaluated value (when available).
+- `output` - Array of strings containing intercepted `print()` output.
+- `error` - Error message when evaluation fails or times out.
+
+**Use Cases**
+- Inspect live values from the running scene without pausing the game.
+- Grab quick measurements (positions, health, timers) from remote nodes.
+- Trigger lightweight runtime-side helpers (e.g. `print(debug_state())`) and capture the output inline.
+
 ### get_debug_output
-Fetch the Godot editor's debug console output.
+Fetch the current contents of the editor Output panel.
 
 **Parameters:** None
 
@@ -323,10 +354,45 @@ Fetch the Godot editor's debug console output.
 Show me the latest debug logs from the editor.
 ```
 
+**Response Contains**
+- `output` — string containing the full Output panel text at the moment of the request.
+- `diagnostics` — dictionary describing how the log was captured (`source`, `detail`, last control path/class, log file fallback, etc.).
+
 **Use Cases:**
 - Investigate crash/warning messages while iterating on features.
 - Review custom `print()` output triggered through `execute_editor_script`.
-- Share runtime diagnostics with collaborators or automated agents.
+- Share runtime diagnostics with collaborators or automated agents, including metadata that explains where the text was sourced (editor control, debugger fallback, log file).
+
+### subscribe_debug_output / unsubscribe_debug_output
+Register or remove a live subscription to the Output panel feed. Once subscribed, incremental log frames are pushed asynchronously over the MCP WebSocket connection; they appear in the MCP server console by default.
+
+**Parameters:** None
+
+**Usage**
+```
+@mcp godot-mcp run subscribe_debug_output
+```
+
+```
+@mcp godot-mcp run unsubscribe_debug_output
+```
+
+**Response Contains**
+- `subscribed` - boolean flag indicating if the subscription is now active.
+- `message` - Text explaining the effect (start/stop).
+
+**Use Cases**
+- Keep a running tail of warnings and prints during play mode without issuing repeated `get_debug_output` calls.
+- Capture noisy runtime diagnostics while reproducing bugs.
+- Mirror the debugger log in external tooling or CI pipelines.
+
+> **Tip:** The enhanced MCP tool `stream_debug_output` wraps these commands with an `action` parameter (`"start"`/`"stop"`). When the stream is active, each new line appears in the MCP server console prefixed with `[Godot Debug] ...`.
+
+**Manual Test**
+1. `@mcp godot-mcp run stream_debug_output {"action":"start"}` — the client reports that the subscription is active.
+2. Trigger fresh output in Godot (e.g., `push_error("Stream test")` or a `print()`).
+3. Confirm the MCP console shows `[Godot Debug] Stream test`.
+4. `@mcp godot-mcp run stream_debug_output {"action":"stop"}` — no further log lines are emitted after unsubscribing.
 
 ### update_node_transform
 Adjust a node’s position, rotation, or scale from the editor.

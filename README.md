@@ -7,12 +7,13 @@ A comprehensive integration between Godot Engine and AI assistants using the Mod
 - **Full Godot Project Access**: AI assistants can access and modify scripts, scenes, nodes, and project resources.
 - **Flexible Scene Inspection**: Retrieve the current hierarchy with `get_editor_scene_structure`, including optional properties, scripts, and depth limits.
 - **Runtime Scene Inspection**: Snapshot the live scene tree from the running game with `get_runtime_scene_structure`.
+- **Runtime Expression Evaluation**: Run one-off expressions against the live game using `evaluate_runtime`, capturing both returned values and any `print()` output.
 - **Dynamic Script Access**: Read any script via `godot://script/{path}` and fetch metadata using `godot://script/{path}/metadata`.
 - **Script Editing Tools**: Create, edit, or template scripts directly through MCP commands.
 - **Node Management**: Create, remove, list, and inspect nodes with automatic path normalization.
 - **Scene Operations**: Open, save, and create scenes; query project info and current scene state.
 - **Asset Management**: List assets by type (`list_assets_by_type`) or enumerate project files; resource template `godot://assets/{type}` returns JSON.
-- **Debug Output Access**: Read editor debug logs with `get_debug_output`.
+- **Debug Output Access**: Snapshot logs with `get_debug_output`, or tail them live via `stream_debug_output`.
 - **Editor Automation**: Execute GDScript in the editor context via `execute_editor_script`.
 - **Two-way Workflow**: Send project data to AI, apply suggested changes, and refresh Godot automatically.
 
@@ -197,6 +198,7 @@ Reset all enemy nodes' health to 100.
 #### Enhanced Commands (NEW)
 - `get_editor_scene_structure` - Returns the current scene hierarchy with optional `include_properties`, `include_scripts`, and `max_depth` filters
 - `get_runtime_scene_structure` - Returns the runtime scene hierarchy from the running game (requires active debugger session)
+- `evaluate_runtime` - Evaluates a GDScript expression inside the running game via the debugger bridge (requires the runtime autoload helper)
 - `get_debug_output` - Retrieves debug logs from editor
 - `update_node_transform` - Updates node position, rotation, and scale
 - `list_assets_by_type` - Lists project assets by type

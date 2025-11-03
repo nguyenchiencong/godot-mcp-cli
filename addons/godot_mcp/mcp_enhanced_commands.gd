@@ -16,6 +16,15 @@ func process_command(client_id: int, command_type: String, params: Dictionary, c
 		"update_node_transform":
 			_handle_update_node_transform(client_id, params, command_id)
 			return true
+		"evaluate_runtime":
+			_handle_evaluate_runtime(client_id, params, command_id)
+			return true
+		"subscribe_debug_output":
+			_handle_subscribe_debug_output(client_id, command_id)
+			return true
+		"unsubscribe_debug_output":
+			_handle_unsubscribe_debug_output(client_id, command_id)
+			return true
 	
 	# Command not handled by this processor
 	return false
@@ -83,6 +92,74 @@ func _handle_get_runtime_scene_structure(client_id: int, params: Dictionary, com
 		}
 
 	_send_success(client_id, snapshot, command_id)
+
+func _handle_evaluate_runtime(client_id: int, params: Dictionary, command_id: String) -> void:
+	var runtime_bridge := _get_runtime_bridge()
+	if runtime_bridge == null:
+		_send_success(client_id, {
+			"error": "Runtime debugger bridge not available. Ensure the project is running."
+		}, command_id)
+		return
+
+	var expression := ""
+	if params.has("expression"):
+		expression = str(params.get("expression", ""))
+	elif params.has("code"):
+		expression = str(params.get("code", ""))
+
+	if expression.strip_edges().is_empty():
+		_send_error(client_id, "Expression cannot be empty", command_id)
+		return
+
+	var options: Dictionary = {}
+	if params.has("context_path"):
+		options["node_path"] = str(params.get("context_path"))
+	elif params.has("node_path"):
+		options["node_path"] = str(params.get("node_path"))
+
+	if params.has("capture_prints"):
+		options["capture_prints"] = _coerce_bool(params.get("capture_prints"), true)
+
+	var timeout_ms := int(params.get("timeout_ms", MCPRuntimeDebuggerBridge.DEFAULT_EVAL_TIMEOUT_MS))
+	if timeout_ms < 100:
+		timeout_ms = 100
+	elif timeout_ms > 5000:
+		timeout_ms = 5000
+
+	var request_info := runtime_bridge.evaluate_runtime_expression(expression, options)
+	if request_info.has("error"):
+		_send_success(client_id, request_info, command_id)
+		return
+
+	var session_id: int = request_info.get("session_id", -1)
+	var request_id: int = request_info.get("request_id", -1)
+	if session_id < 0 or request_id < 0:
+		_send_success(client_id, { "error": "Failed to enqueue runtime evaluation request." }, command_id)
+		return
+
+	var scene_tree := get_tree()
+	if scene_tree == null:
+		_send_success(client_id, { "error": "Scene tree unavailable while waiting for runtime evaluation." }, command_id)
+		return
+
+	var deadline: int = Time.get_ticks_msec() + timeout_ms
+	var response: Dictionary = {}
+
+	while Time.get_ticks_msec() <= deadline:
+		if runtime_bridge.has_eval_result(session_id, request_id):
+			response = runtime_bridge.take_eval_result(session_id, request_id)
+			break
+		await scene_tree.process_frame
+
+	if response.is_empty():
+		response = {
+			"error": "Timed out waiting for runtime evaluation result.",
+			"hint": "Ensure the running project registers the mcp_eval debugger capture via EngineDebugger.register_message_capture."
+		}
+	elif not response.get("success", true) and not response.has("error"):
+		response["error"] = "Runtime evaluation failed."
+
+	_send_success(client_id, response, command_id)
 
 func _build_scene_structure_result(options: Dictionary) -> Dictionary:
 	var editor_interface = _get_editor_interface()
@@ -195,22 +272,72 @@ func _handle_get_debug_output(client_id: int, _params: Dictionary, command_id: S
 	_send_success(client_id, result, command_id)
 
 func get_debug_output() -> Dictionary:
-	var output = ""
-	
-	# For Godot 4.x
-	if Engine.has_singleton("EditorDebuggerNode"):
-		var debugger = Engine.get_singleton("EditorDebuggerNode")
-		if debugger and debugger.has_method("get_log"):
-			output = debugger.get_log()
-	# For Godot 3.x fallback
-	elif has_node("/root/EditorNode/DebuggerPanel"):
-		var debugger = get_node("/root/EditorNode/DebuggerPanel")
-		if debugger and debugger.has_method("get_output"):
-			output = debugger.get_output()
+	var output := ""
+	var publisher := _get_debug_output_publisher()
+	var diagnostics: Dictionary = {}
+	if publisher:
+		output = publisher.get_full_log_text()
+
+		if publisher.has_method("get_capture_diagnostics"):
+			diagnostics = publisher.get_capture_diagnostics()
+	else:
+		# Fallback to remote debugger log if publisher unavailable.
+		var source := "none"
+		var detail := ""
+		if Engine.has_singleton("EditorDebuggerNode"):
+			var debugger = Engine.get_singleton("EditorDebuggerNode")
+			if debugger and debugger.has_method("get_log"):
+				output = debugger.get_log()
+				source = "debugger_singleton"
+				detail = "len=%d" % output.length()
+		elif has_node("/root/EditorNode/DebuggerPanel"):
+			var debugger_panel = get_node("/root/EditorNode/DebuggerPanel")
+			if debugger_panel and debugger_panel.has_method("get_output"):
+				output = debugger_panel.get_output()
+				source = "debugger_panel"
+				detail = "len=%d" % output.length()
+
+		diagnostics = {
+			"source": source,
+			"detail": detail,
+			"timestamp": Time.get_ticks_msec()
+		}
 	
 	return {
-		"output": output
+		"output": output,
+		"diagnostics": diagnostics
 	}
+
+func _handle_subscribe_debug_output(client_id: int, command_id: String) -> void:
+	var publisher := _get_debug_output_publisher()
+	if publisher == null:
+		_send_error(client_id, "Debug output publisher unavailable.", command_id)
+		return
+
+	publisher.subscribe(client_id)
+	_send_success(client_id, {
+		"subscribed": true,
+		"message": "Live debug output streaming enabled. Future log frames will be delivered asynchronously."
+	}, command_id)
+
+func _handle_unsubscribe_debug_output(client_id: int, command_id: String) -> void:
+	var publisher := _get_debug_output_publisher()
+	if publisher == null:
+		_send_error(client_id, "Debug output publisher unavailable.", command_id)
+		return
+
+	publisher.unsubscribe(client_id)
+	_send_success(client_id, {
+		"subscribed": false,
+		"message": "Live debug output streaming disabled for this client."
+	}, command_id)
+
+func _get_debug_output_publisher() -> MCPDebugOutputPublisher:
+	if Engine.has_meta("MCPDebugOutputPublisher"):
+		var publisher = Engine.get_meta("MCPDebugOutputPublisher")
+		if publisher and publisher is MCPDebugOutputPublisher:
+			return publisher
+	return null
 
 # ---- Node Transform Commands ----
 

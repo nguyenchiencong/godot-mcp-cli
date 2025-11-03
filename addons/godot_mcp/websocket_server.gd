@@ -165,6 +165,25 @@ func send_response(client_id: int, response: Dictionary) -> int:
 	
 	return result
 
+func send_event(client_id: int, event: Dictionary) -> int:
+	if not peers.has(client_id):
+		return ERR_DOES_NOT_EXIST
+
+	var peer = peers[client_id]
+	if peer == null or peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return ERR_UNAVAILABLE
+
+	var payload := event.duplicate(true)
+	if not payload.has("event"):
+		payload["event"] = "unknown"
+
+	var json_text = JSON.stringify(payload)
+	return peer.send_text(json_text)
+
+func broadcast_event(event: Dictionary) -> void:
+	for client_id in peers.keys():
+		send_event(client_id, event)
+
 func set_port(new_port: int) -> void:
 	if is_server_active():
 		push_error("Cannot change port while server is active")

@@ -5,8 +5,9 @@ var websocket_server: MCPWebSocketServer
 var command_handler = null  # Command handler reference
 var panel = null  # Reference to the MCP panel
 var runtime_debugger_bridge = null  # Runtime scene inspection bridge
+var debug_output_publisher = null  # Live debug output broadcaster
 var _runtime_bridge_warning_logged := false
-const SCENE_CAPTURE_NAMES := ["scene", "limboai"]
+const SCENE_CAPTURE_NAMES := ["scene", "limboai", "mcp_eval"]
 
 func _enter_tree():
 	# Store plugin instance for EditorInterface access
@@ -20,6 +21,7 @@ func _enter_tree():
 	websocket_server = load("res://addons/godot_mcp/websocket_server.gd").new()
 	websocket_server.name = "WebSocketServer"
 	add_child(websocket_server)
+	websocket_server.connect("client_disconnected", Callable(self, "_on_client_disconnected"))
 	
 	# Initialize the command handler
 	print("Creating command handler...")
@@ -40,6 +42,15 @@ func _enter_tree():
 	panel = load("res://addons/godot_mcp/ui/mcp_panel.tscn").instantiate()
 	panel.websocket_server = websocket_server
 	add_control_to_bottom_panel(panel, "MCP Server")
+
+	# Initialize live debug output publisher
+	var publisher_script = load("res://addons/godot_mcp/mcp_debug_output_publisher.gd")
+	if publisher_script:
+		debug_output_publisher = publisher_script.new()
+		debug_output_publisher.name = "DebugOutputPublisher"
+		debug_output_publisher.websocket_server = websocket_server
+		add_child(debug_output_publisher)
+		Engine.set_meta("MCPDebugOutputPublisher", debug_output_publisher)
 	
 	print("MCP Server plugin initialized")
 
@@ -49,6 +60,8 @@ func _exit_tree():
 		Engine.remove_meta("GodotMCPPlugin")
 	if Engine.has_meta("MCPRuntimeDebuggerBridge"):
 		Engine.remove_meta("MCPRuntimeDebuggerBridge")
+	if Engine.has_meta("MCPDebugOutputPublisher"):
+		Engine.remove_meta("MCPDebugOutputPublisher")
 	_update_debugger_captures(false)
 	
 	if runtime_debugger_bridge:
@@ -60,6 +73,11 @@ func _exit_tree():
 		remove_control_from_bottom_panel(panel)
 		panel.queue_free()
 		panel = null
+
+	if debug_output_publisher:
+		debug_output_publisher.unsubscribe_all()
+		debug_output_publisher.queue_free()
+		debug_output_publisher = null
 	
 	# Clean up the websocket server and command handler
 	if websocket_server:
@@ -71,11 +89,11 @@ func _exit_tree():
 
 # Helper function for command processors to access EditorInterface
 func get_editor_interface():
-	return get_editor_interface()
+	return super.get_editor_interface()
 
 # Helper function for command processors to get undo/redo manager
 func get_undo_redo():
-	return get_undo_redo()
+	return super.get_undo_redo()
 
 func _try_register_runtime_bridge() -> bool:
 	if runtime_debugger_bridge:
@@ -125,3 +143,7 @@ func _update_debugger_captures(enable: bool) -> void:
 		else:
 			if not has_query or engine_debugger.has_capture(name):
 				engine_debugger.set_capture(name, false)
+
+func _on_client_disconnected(client_id: int) -> void:
+	if debug_output_publisher:
+		debug_output_publisher.unsubscribe(client_id)

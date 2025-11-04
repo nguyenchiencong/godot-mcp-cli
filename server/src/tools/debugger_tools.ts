@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { getGodotConnection } from '../utils/godot_connection.js';
-import { MCPTool } from '../utils/types.js';
+import { CommandResult, MCPTool } from '../utils/types.js';
 
 interface DebuggerBreakpointParams {
   script_path: string;
@@ -11,14 +11,90 @@ interface DebuggerSessionParams {
   session_id?: number;
 }
 
-interface DebuggerEventParams {
-  enable_events?: boolean;
+type SimpleToolSuccess<T> = (params: T, result: CommandResult) => string;
+
+interface SimpleDebuggerToolConfig<T> {
+  name: string;
+  description: string;
+  command: string;
+  parameters: z.ZodType<T>;
+  successMessage: SimpleToolSuccess<T>;
+  errorContext: string;
+  transformParams?: (params: T) => Record<string, unknown>;
 }
 
+const createSimpleDebuggerTool = <T>(config: SimpleDebuggerToolConfig<T>): MCPTool<T> => ({
+  name: config.name,
+  description: config.description,
+  parameters: config.parameters,
+  execute: async (params: T): Promise<string> => {
+    const godot = getGodotConnection();
+    const safeParams = (params ?? ({} as T));
+    const payload = config.transformParams
+      ? config.transformParams(safeParams)
+      : (safeParams as unknown as Record<string, unknown>);
+
+    try {
+      const result = await godot.sendCommand(config.command, payload);
+
+      if (result?.success === false) {
+        throw new Error(result.message ?? `Failed to ${config.errorContext}`);
+      }
+
+      return config.successMessage(safeParams, result);
+    } catch (error) {
+      throw new Error(`Failed to ${config.errorContext}: ${(error as Error).message}`);
+    }
+  },
+});
+
+const formatBreakpointList = (result: CommandResult): string => {
+  if (!result.breakpoints) {
+    return 'No breakpoints information available';
+  }
+
+  const lines: string[] = ['Current breakpoints:'];
+
+  for (const [scriptPath, breakpointLines] of Object.entries(result.breakpoints)) {
+    if (Array.isArray(breakpointLines) && breakpointLines.length > 0) {
+      lines.push(`- ${scriptPath}: ${breakpointLines.map((line: number) => `line ${line}`).join(', ')}`);
+    }
+  }
+
+  if (lines.length === 1) {
+    lines.push('No breakpoints set');
+  }
+
+  return lines.join('\n');
+};
+
+const formatDebuggerState = (state: CommandResult): string => {
+  const lines: string[] = ['Debugger State:'];
+  lines.push(`- Active: ${state.debugger_active ? 'Yes' : 'No'}`);
+
+  if (Array.isArray(state.active_sessions) && state.active_sessions.length > 0) {
+    lines.push(`- Active Sessions: ${state.active_sessions.join(', ')}`);
+    lines.push(`- Current Session: ${state.current_session_id ?? 'None'}`);
+    lines.push(`- Paused: ${state.paused ? 'Yes' : 'No'}`);
+    lines.push(`- Total Breakpoints: ${state.total_breakpoints ?? 0}`);
+
+    if (state.current_script && typeof state.current_line === 'number' && state.current_line >= 0) {
+      lines.push(`- Current Location: ${state.current_script}:${state.current_line}`);
+    }
+  } else {
+    lines.push('- No active debug sessions');
+  }
+
+  return lines.join('\n');
+};
+
+const emptyParamsSchema = z.object({}) as z.ZodType<Record<string, never>>;
+
 export const debuggerTools: MCPTool[] = [
-  {
+  createSimpleDebuggerTool<DebuggerBreakpointParams>({
     name: 'debugger_set_breakpoint',
     description: 'Sets a breakpoint at a specific line in a script',
+    command: 'debugger_set_breakpoint',
     parameters: z.object({
       script_path: z.string()
         .describe('The path to the script file (absolute or relative to res://)'),
@@ -27,26 +103,14 @@ export const debuggerTools: MCPTool[] = [
         .min(0)
         .describe('The line number where to set the breakpoint'),
     }),
-    execute: async ({ script_path, line }: DebuggerBreakpointParams): Promise<string> => {
-      const godot = getGodotConnection();
+    successMessage: ({ script_path, line }) => `Breakpoint set successfully at ${script_path}:${line}`,
+    errorContext: 'set breakpoint',
+  }),
 
-      try {
-        const result = await godot.sendCommand('debugger_set_breakpoint', { script_path, line });
-
-        if (result.success) {
-          return `Breakpoint set successfully at ${script_path}:${line}`;
-        } else {
-          throw new Error(result.message || 'Failed to set breakpoint');
-        }
-      } catch (error) {
-        throw new Error(`Failed to set breakpoint: ${(error as Error).message}`);
-      }
-    },
-  },
-
-  {
+  createSimpleDebuggerTool<DebuggerBreakpointParams>({
     name: 'debugger_remove_breakpoint',
     description: 'Removes a breakpoint at a specific line in a script',
+    command: 'debugger_remove_breakpoint',
     parameters: z.object({
       script_path: z.string()
         .describe('The path to the script file (absolute or relative to res://)'),
@@ -55,164 +119,71 @@ export const debuggerTools: MCPTool[] = [
         .min(0)
         .describe('The line number where to remove the breakpoint'),
     }),
-    execute: async ({ script_path, line }: DebuggerBreakpointParams): Promise<string> => {
-      const godot = getGodotConnection();
-
-      try {
-        const result = await godot.sendCommand('debugger_remove_breakpoint', { script_path, line });
-
-        if (result.success) {
-          return `Breakpoint removed successfully from ${script_path}:${line}`;
-        } else {
-          throw new Error(result.message || 'Failed to remove breakpoint');
-        }
-      } catch (error) {
-        throw new Error(`Failed to remove breakpoint: ${(error as Error).message}`);
-      }
-    },
-  },
+    successMessage: ({ script_path, line }) => `Breakpoint removed successfully from ${script_path}:${line}`,
+    errorContext: 'remove breakpoint',
+  }),
 
   {
     name: 'debugger_get_breakpoints',
     description: 'Gets all currently set breakpoints',
-    parameters: z.object({}),
+    parameters: emptyParamsSchema,
     execute: async (): Promise<string> => {
       const godot = getGodotConnection();
 
       try {
         const result = await godot.sendCommand('debugger_get_breakpoints', {});
-
-        if (result.breakpoints) {
-          let output = 'Current breakpoints:\n';
-
-          for (const [scriptPath, lines] of Object.entries(result.breakpoints)) {
-            if (Array.isArray(lines) && lines.length > 0) {
-              output += `- ${scriptPath}: `;
-              output += lines.map((line: number) => `line ${line}`).join(', ');
-              output += '\n';
-            }
-          }
-
-          if (output === 'Current breakpoints:\n') {
-            output += 'No breakpoints set\n';
-          }
-
-          return output.trim();
-        } else {
-          return 'No breakpoints information available';
-        }
+        return formatBreakpointList(result);
       } catch (error) {
         throw new Error(`Failed to get breakpoints: ${(error as Error).message}`);
       }
     },
   },
 
-  {
+  createSimpleDebuggerTool<Record<string, never>>({
     name: 'debugger_clear_all_breakpoints',
     description: 'Clears all breakpoints',
-    parameters: z.object({}),
-    execute: async (): Promise<string> => {
-      const godot = getGodotConnection();
+    command: 'debugger_clear_all_breakpoints',
+    parameters: emptyParamsSchema,
+    successMessage: () => 'All breakpoints cleared successfully',
+    errorContext: 'clear breakpoints',
+  }),
 
-      try {
-        const result = await godot.sendCommand('debugger_clear_all_breakpoints', {});
-
-        if (result.success) {
-          return `All breakpoints cleared successfully`;
-        } else {
-          throw new Error(result.message || 'Failed to clear breakpoints');
-        }
-      } catch (error) {
-        throw new Error(`Failed to clear breakpoints: ${(error as Error).message}`);
-      }
-    },
-  },
-
-  {
+  createSimpleDebuggerTool<Record<string, never>>({
     name: 'debugger_pause_execution',
     description: 'Pauses the execution of the running project',
-    parameters: z.object({}),
-    execute: async (): Promise<string> => {
-      const godot = getGodotConnection();
+    command: 'debugger_pause_execution',
+    parameters: emptyParamsSchema,
+    successMessage: () => 'Execution paused successfully',
+    errorContext: 'pause execution',
+  }),
 
-      try {
-        const result = await godot.sendCommand('debugger_pause_execution', {});
-
-        if (result.success) {
-          return `Execution paused successfully`;
-        } else {
-          throw new Error(result.message || 'Failed to pause execution');
-        }
-      } catch (error) {
-        throw new Error(`Failed to pause execution: ${(error as Error).message}`);
-      }
-    },
-  },
-
-  {
+  createSimpleDebuggerTool<Record<string, never>>({
     name: 'debugger_resume_execution',
     description: 'Resumes the execution of the paused project',
-    parameters: z.object({}),
-    execute: async (): Promise<string> => {
-      const godot = getGodotConnection();
+    command: 'debugger_resume_execution',
+    parameters: emptyParamsSchema,
+    successMessage: () => 'Execution resumed successfully',
+    errorContext: 'resume execution',
+  }),
 
-      try {
-        const result = await godot.sendCommand('debugger_resume_execution', {});
-
-        if (result.success) {
-          return `Execution resumed successfully`;
-        } else {
-          throw new Error(result.message || 'Failed to resume execution');
-        }
-      } catch (error) {
-        throw new Error(`Failed to resume execution: ${(error as Error).message}`);
-      }
-    },
-  },
-
-  {
+  createSimpleDebuggerTool<Record<string, never>>({
     name: 'debugger_step_over',
     description: 'Steps over the current line of code',
-    parameters: z.object({}),
-    execute: async (): Promise<string> => {
-      const godot = getGodotConnection();
+    command: 'debugger_step_over',
+    parameters: emptyParamsSchema,
+    successMessage: () => 'Step over executed successfully',
+    errorContext: 'step over',
+  }),
 
-      try {
-        const result = await godot.sendCommand('debugger_step_over', {});
-
-        if (result.success) {
-          return `Step over executed successfully`;
-        } else {
-          throw new Error(result.message || 'Failed to step over');
-        }
-      } catch (error) {
-        throw new Error(`Failed to step over: ${(error as Error).message}`);
-      }
-    },
-  },
-
-  {
+  createSimpleDebuggerTool<Record<string, never>>({
     name: 'debugger_step_into',
     description: 'Steps into the current function call',
-    parameters: z.object({}),
-    execute: async (): Promise<string> => {
-      const godot = getGodotConnection();
+    command: 'debugger_step_into',
+    parameters: emptyParamsSchema,
+    successMessage: () => 'Step into executed successfully',
+    errorContext: 'step into',
+  }),
 
-      try {
-        const result = await godot.sendCommand('debugger_step_into', {});
-
-        if (result.success) {
-          return `Step into executed successfully`;
-        } else {
-          throw new Error(result.message || 'Failed to step into');
-        }
-      } catch (error) {
-        throw new Error(`Failed to step into: ${(error as Error).message}`);
-      }
-    },
-  },
-
-  
   {
     name: 'debugger_get_call_stack',
     description: 'Gets the current call stack',
@@ -231,11 +202,13 @@ export const debuggerTools: MCPTool[] = [
 
         if (result.request_sent) {
           return `Call stack request sent for session ${result.session_id}`;
-        } else if (result.error) {
-          throw new Error(result.error);
-        } else {
-          return 'Call stack request sent';
         }
+
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        return 'Call stack request sent';
       } catch (error) {
         throw new Error(`Failed to get call stack: ${(error as Error).message}`);
       }
@@ -245,67 +218,34 @@ export const debuggerTools: MCPTool[] = [
   {
     name: 'debugger_get_current_state',
     description: 'Gets the current state of the debugger',
-    parameters: z.object({}),
+    parameters: emptyParamsSchema,
     execute: async (): Promise<string> => {
       const godot = getGodotConnection();
 
       try {
         const result = await godot.sendCommand('debugger_get_current_state', {});
-
-        let output = 'Debugger State:\n';
-        output += `- Active: ${result.debugger_active ? 'Yes' : 'No'}\n`;
-
-        if (result.active_sessions && result.active_sessions.length > 0) {
-          output += `- Active Sessions: ${result.active_sessions.join(', ')}\n`;
-          output += `- Current Session: ${result.current_session_id || 'None'}\n`;
-          output += `- Paused: ${result.paused ? 'Yes' : 'No'}\n`;
-          output += `- Total Breakpoints: ${result.total_breakpoints}\n`;
-
-          if (result.current_script && result.current_line >= 0) {
-            output += `- Current Location: ${result.current_script}:${result.current_line}\n`;
-          }
-        } else {
-          output += '- No active debug sessions\n';
-        }
-
-        return output.trim();
+        return formatDebuggerState(result);
       } catch (error) {
         throw new Error(`Failed to get debugger state: ${(error as Error).message}`);
       }
     },
   },
 
-  {
+  createSimpleDebuggerTool<Record<string, never>>({
     name: 'debugger_enable_events',
     description: 'Enables debugger events for this client (required for breakpoint notifications)',
-    parameters: z.object({}),
-    execute: async (): Promise<string> => {
-      const godot = getGodotConnection();
+    command: 'debugger_enable_events',
+    parameters: emptyParamsSchema,
+    successMessage: (_, result) => `Debugger events enabled for client ${result.client_id}. You will now receive notifications for breakpoints and execution changes.`,
+    errorContext: 'enable debugger events',
+  }),
 
-      try {
-        const result = await godot.sendCommand('debugger_enable_events', {});
-
-        return `Debugger events enabled for client ${result.client_id}. You will now receive notifications for breakpoints and execution changes.`;
-      } catch (error) {
-        throw new Error(`Failed to enable debugger events: ${(error as Error).message}`);
-      }
-    },
-  },
-
-  {
+  createSimpleDebuggerTool<Record<string, never>>({
     name: 'debugger_disable_events',
     description: 'Disables debugger events for this client',
-    parameters: z.object({}),
-    execute: async (): Promise<string> => {
-      const godot = getGodotConnection();
-
-      try {
-        const result = await godot.sendCommand('debugger_disable_events', {});
-
-        return `Debugger events disabled for client ${result.client_id}`;
-      } catch (error) {
-        throw new Error(`Failed to disable debugger events: ${(error as Error).message}`);
-      }
-    },
-  },
+    command: 'debugger_disable_events',
+    parameters: emptyParamsSchema,
+    successMessage: (_, result) => `Debugger events disabled for client ${result.client_id}`,
+    errorContext: 'disable debugger events',
+  }),
 ];

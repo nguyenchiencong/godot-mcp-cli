@@ -145,122 +145,151 @@ func _ensure_session_state(session_id: int, active: bool = false) -> void:
 
 	_active_sessions[session_id]["active"] = active
 
-# Breakpoint management
-func set_breakpoint(script_path: String, line: int) -> Dictionary:
-	var key = "%s:%d" % [script_path, line]
-
-	# Add to local breakpoints tracking
+func _track_local_breakpoint(script_path: String, line: int) -> void:
 	if not _breakpoints.has(script_path):
 		_breakpoints[script_path] = []
 
-	if line not in _breakpoints[script_path]:
-		_breakpoints[script_path].append(line)
+	var script_breakpoints: Array = _breakpoints[script_path]
+	if line not in script_breakpoints:
+		script_breakpoints.append(line)
 
-	# Send to active debugger sessions
+func _untrack_local_breakpoint(script_path: String, line: int) -> void:
+	if not _breakpoints.has(script_path):
+		return
+
+	var script_breakpoints: Array = _breakpoints[script_path]
+	script_breakpoints.erase(line)
+	if script_breakpoints.is_empty():
+		_breakpoints.erase(script_path)
+
+func _ensure_session_breakpoint_storage(session_id: int) -> Dictionary:
+	if not _session_breakpoints.has(session_id):
+		_session_breakpoints[session_id] = {}
+
+	return _session_breakpoints[session_id]
+
+func _session_breakpoint_lines(session_id: int, script_path: String) -> Array:
+	var storage = _ensure_session_breakpoint_storage(session_id)
+	if not storage.has(script_path):
+		storage[script_path] = []
+
+	return storage[script_path]
+
+func _get_primary_session_info() -> Dictionary:
 	var active_sessions = _get_active_session_ids()
 	if active_sessions.is_empty():
-		return {
-			"success": false,
-			"message": "No active debugger session. Start the project with debugging first."
-		}
+		return {}
 
-	var session_id = active_sessions[0]
+	var session_id: int = active_sessions[0]
 	var session := get_session(session_id)
-	if session and session.is_active():
-		# Track breakpoints per session
-		if not _session_breakpoints.has(session_id):
-			_session_breakpoints[session_id] = {}
+	if not session or not session.is_active():
+		return {"error": "Debugger session not active"}
 
-		if not _session_breakpoints[session_id].has(script_path):
-			_session_breakpoints[session_id][script_path] = []
+	return {
+		"id": session_id,
+		"session": session
+	}
 
-		if line not in _session_breakpoints[session_id][script_path]:
-			_session_breakpoints[session_id][script_path].append(line)
+func _with_primary_session(error_message: String, action: Callable) -> Dictionary:
+	var info = _get_primary_session_info()
+	if info.is_empty():
+		return {"success": false, "message": error_message}
 
-		# Use Godot's native breakpoint system
-		var success = _set_native_breakpoint(session, script_path, line)
+	if info.has("error"):
+		return {"success": false, "message": info["error"]}
 
-		if success:
-			breakpoint_set.emit(session_id, script_path, line, true)
-			_trace("Breakpoint set successfully: %s:%d" % [script_path, line])
+	return action.call(info["id"], info["session"])
 
-			return {
-				"success": true,
-				"session_id": session_id,
-				"script_path": script_path,
-				"line": line
-			}
-		else:
+func _active_session_objects() -> Array:
+	var sessions: Array = []
+	for session_id in _get_active_session_ids():
+		var session := get_session(session_id)
+		if session and session.is_active():
+			sessions.append({
+				"id": session_id,
+				"session": session
+			})
+
+	return sessions
+
+func _add_breakpoint_source(target: Dictionary, sources: Dictionary, source_name: String, breakpoint_map: Dictionary) -> void:
+	if breakpoint_map.is_empty():
+		return
+
+	_merge_breakpoint_map(target, breakpoint_map)
+	sources[source_name] = breakpoint_map
+
+func _send_session_command(command: String, trace_label: String) -> Dictionary:
+	return _with_primary_session("No active debugger session", func(session_id: int, session):
+		if not session or not session.has_method("send_message"):
+			return {"success": false, "message": "Debugger session not active"}
+
+		session.send_message(command, [])
+		_trace(trace_label)
+		return {"success": true, "session_id": session_id}
+	)
+
+# Breakpoint management
+func set_breakpoint(script_path: String, line: int) -> Dictionary:
+	_track_local_breakpoint(script_path, line)
+
+	return _with_primary_session(
+		"No active debugger session. Start the project with debugging first.",
+		func(session_id: int, session):
+			var session_lines: Array = _session_breakpoint_lines(session_id, script_path)
+			if line not in session_lines:
+				session_lines.append(line)
+
+			var success = _set_native_breakpoint(session, script_path, line)
+			if success:
+				breakpoint_set.emit(session_id, script_path, line, true)
+				_trace("Breakpoint set successfully: %s:%d" % [script_path, line])
+
+				return {
+					"success": true,
+					"session_id": session_id,
+					"script_path": script_path,
+					"line": line
+				}
+
 			return {
 				"success": false,
 				"message": "Failed to set breakpoint in Godot's debugger"
 			}
+	)
 
-	return {"success": false, "message": "Debugger session not active"}
 
 func remove_breakpoint(script_path: String, line: int) -> Dictionary:
-	var key = "%s:%d" % [script_path, line]
+	_untrack_local_breakpoint(script_path, line)
 
-	# Remove from local breakpoints tracking
-	if _breakpoints.has(script_path):
-		_breakpoints[script_path].erase(line)
-		if _breakpoints[script_path].is_empty():
-			_breakpoints.erase(script_path)
+	return _with_primary_session("No active debugger session", func(session_id: int, session):
+		if _session_breakpoints.has(session_id) and _session_breakpoints[session_id].has(script_path):
+			_session_breakpoints[session_id][script_path].erase(line)
+			if _session_breakpoints[session_id][script_path].is_empty():
+				_session_breakpoints[session_id].erase(script_path)
 
-	# Send to active debugger sessions
-	var active_sessions = _get_active_session_ids()
-	if active_sessions.is_empty():
-		return {"success": false, "message": "No active debugger session"}
-
-	var session_id = active_sessions[0]
-	var session := get_session(session_id)
-	if session and session.is_active():
-		# Remove from session tracking
-		if _session_breakpoints.has(session_id):
-			if _session_breakpoints[session_id].has(script_path):
-				_session_breakpoints[session_id][script_path].erase(line)
-				if _session_breakpoints[session_id][script_path].is_empty():
-					_session_breakpoints[session_id].erase(script_path)
-
-		# Use Godot's native breakpoint removal
 		var success = _remove_native_breakpoint(session, script_path, line)
-
 		if success:
 			breakpoint_removed.emit(session_id, script_path, line, true)
 			_trace("Breakpoint removed successfully: %s:%d" % [script_path, line])
 
 			return {"success": true, "session_id": session_id}
-		else:
-			return {
-				"success": false,
-				"message": "Failed to remove breakpoint in Godot's debugger"
-			}
 
-	return {"success": false, "message": "Debugger session not active"}
+		return {
+			"success": false,
+			"message": "Failed to remove breakpoint in Godot's debugger"
+		}
+	)
+
 
 func get_breakpoints() -> Dictionary:
 	var aggregated: Dictionary = {}
 	var sources: Dictionary = {}
 
-	var tracked_breakpoints := _breakpoints.duplicate(true)
-	if not tracked_breakpoints.is_empty():
-		_merge_breakpoint_map(aggregated, tracked_breakpoints)
-		sources["mcp_tracked"] = tracked_breakpoints
-
-	var tracked_session_breakpoints := _collect_tracked_session_breakpoints()
-	if not tracked_session_breakpoints.is_empty():
-		_merge_breakpoint_map(aggregated, tracked_session_breakpoints)
-		sources["session_tracked"] = tracked_session_breakpoints
-
-	var session_breakpoints := _collect_active_session_breakpoints()
-	if not session_breakpoints.is_empty():
-		_merge_breakpoint_map(aggregated, session_breakpoints)
-		sources["session_reported"] = session_breakpoints
-
-	var editor_breakpoints := _collect_editor_breakpoints()
-	if not editor_breakpoints.is_empty():
-		_merge_breakpoint_map(aggregated, editor_breakpoints)
-		sources["editor"] = editor_breakpoints
+	_add_breakpoint_source(aggregated, sources, "mcp_tracked", _breakpoints.duplicate(true))
+	_add_breakpoint_source(aggregated, sources, "session_tracked", _collect_tracked_session_breakpoints())
+	_add_breakpoint_source(aggregated, sources, "session_reported", _collect_active_session_breakpoints())
+	_add_breakpoint_source(aggregated, sources, "editor", _collect_editor_breakpoints())
 
 	return {
 		"breakpoints": aggregated,
@@ -276,24 +305,24 @@ func clear_all_breakpoints() -> Dictionary:
 	_session_breakpoints.clear()
 
 	# Actually remove breakpoints from Godot's debugger system
-	var active_sessions = _get_active_session_ids()
 	var cleared_count = 0
 
-	for session_id in active_sessions:
-		var session := get_session(session_id)
-		if session and session.is_active():
-			# Clear breakpoints from this session using native methods
-			if old_session_breakpoints.has(session_id):
-				var session_bps = old_session_breakpoints[session_id]
-				for script_path in session_bps:
-					for line in session_bps[script_path]:
-						var success = _remove_native_breakpoint(session, script_path, line)
-						if success:
-							cleared_count += 1
-							_trace("Cleared breakpoint %s:%d from session %s" % [script_path, line, session_id])
+	for session_info in _active_session_objects():
+		var session_id: int = session_info["id"]
+		var session = session_info["session"]
 
-			# Also try to clear any remaining breakpoints using direct methods
-			_clear_all_native_breakpoints(session)
+		# Clear breakpoints from this session using native methods
+		if old_session_breakpoints.has(session_id):
+			var session_bps = old_session_breakpoints[session_id]
+			for script_path in session_bps:
+				for line in session_bps[script_path]:
+					var success = _remove_native_breakpoint(session, script_path, line)
+					if success:
+						cleared_count += 1
+						_trace("Cleared breakpoint %s:%d from session %s" % [script_path, line, session_id])
+
+		# Also try to clear any remaining breakpoints using direct methods
+		_clear_all_native_breakpoints(session)
 
 	return {
 		"success": true,
@@ -303,64 +332,16 @@ func clear_all_breakpoints() -> Dictionary:
 
 # Execution control
 func pause_execution() -> Dictionary:
-	var active_sessions = _get_active_session_ids()
-	if active_sessions.is_empty():
-		return {"success": false, "message": "No active debugger session"}
-
-	var session_id = active_sessions[0]
-	var session := get_session(session_id)
-	if session and session.is_active():
-		# Use Godot's native break command
-		session.send_message("break", [])
-		_trace("Sent break command to debugger")
-		return {"success": true, "session_id": session_id}
-
-	return {"success": false, "message": "Debugger session not active"}
+	return _send_session_command("break", "Sent break command to debugger")
 
 func resume_execution() -> Dictionary:
-	var active_sessions = _get_active_session_ids()
-	if active_sessions.is_empty():
-		return {"success": false, "message": "No active debugger session"}
-
-	var session_id = active_sessions[0]
-	var session := get_session(session_id)
-	if session and session.is_active():
-		# Use Godot's native continue command
-		session.send_message("continue", [])
-		_trace("Sent continue command to debugger")
-		return {"success": true, "session_id": session_id}
-
-	return {"success": false, "message": "Debugger session not active"}
+	return _send_session_command("continue", "Sent continue command to debugger")
 
 func step_over() -> Dictionary:
-	var active_sessions = _get_active_session_ids()
-	if active_sessions.is_empty():
-		return {"success": false, "message": "No active debugger session"}
-
-	var session_id = active_sessions[0]
-	var session := get_session(session_id)
-	if session and session.is_active():
-		# Use Godot's native next command
-		session.send_message("next", [])
-		_trace("Sent next (step over) command to debugger")
-		return {"success": true, "session_id": session_id}
-
-	return {"success": false, "message": "Debugger session not active"}
+	return _send_session_command("next", "Sent next (step over) command to debugger")
 
 func step_into() -> Dictionary:
-	var active_sessions = _get_active_session_ids()
-	if active_sessions.is_empty():
-		return {"success": false, "message": "No active debugger session"}
-
-	var session_id = active_sessions[0]
-	var session := get_session(session_id)
-	if session and session.is_active():
-		# Use Godot's native step command
-		session.send_message("step", [])
-		_trace("Sent step (step into) command to debugger")
-		return {"success": true, "session_id": session_id}
-
-	return {"success": false, "message": "Debugger session not active"}
+	return _send_session_command("step", "Sent step (step into) command to debugger")
 
 
 # Call stack and inspection
@@ -775,12 +756,10 @@ func _set_native_breakpoint(session: EditorDebuggerSession, script_path: String,
 	# Method 2: Try direct session methods
 	if session and session.has_method("set_breakpoint"):
 		# Try different parameter formats for set_breakpoint
-		# Based on error, Godot expects exactly 3 arguments
+		# Based on error, Godot expects exactly 3 arguments with String first
 		var attempts = [
 			[script_path, line, true],   # script_path, line, enabled (most likely correct)
-			[line, script_path, true],   # line, script_path, enabled (reversed)
 			[script_path, line, 1],      # script_path, line, enabled (as int)
-			[line, script_path, 1]       # line, script_path, enabled (as int)
 		]
 
 		for attempt in attempts:
@@ -861,9 +840,7 @@ func _remove_native_breakpoint(session: EditorDebuggerSession, script_path: Stri
 		# Some versions of Godot might support setting breakpoints with enabled=false to remove them
 		var attempts = [
 			[script_path, line, false],   # script_path, line, enabled=false
-			[line, script_path, false],   # line, script_path, enabled=false
 			[script_path, line, 0],      # script_path, line, enabled=0
-			[line, script_path, 0]       # line, script_path, enabled=0
 		]
 
 		for attempt in attempts:

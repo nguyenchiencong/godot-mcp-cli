@@ -2,7 +2,7 @@
 
 A comprehensive integration between Godot Engine and AI assistants using the Model Context Protocol (MCP). This plugin allows AI assistants to interact with your Godot projects, providing powerful capabilities for code assistance, scene manipulation, project management, and real-time debugging.
 
-## 🚀 Features
+## Features
 
 ### Core Functionality
 - **Full Godot Project Access**: AI assistants can access and modify scripts, scenes, nodes, and project resources
@@ -270,7 +270,7 @@ Get comprehensive debugger state information.
 - `debugger_enable_events` - Enable real-time debugger event notifications
 - `debugger_disable_events` - Disable debugger event notifications
 
-## 🧪 Testing the Debugger
+## Testing the Debugger
 
 The project includes a comprehensive test setup for debugging:
 
@@ -280,15 +280,7 @@ The project includes a comprehensive test setup for debugging:
 3. Press **F5** to run with debugging enabled
 4. Enable debugger events: `debugger_enable_events()`
 5. Set a breakpoint: `debugger_set_breakpoint({script_path: "res://test_debugger.gd", line: 42})`
-6. Wait for automatic breakpoint triggers or press **SPACE** for manual pause
-
-### Test Features
-- **Interactive Controls**: SPACE (pause), R (reset), T (test function)
-- **Automatic Triggers**: Counter-based breakpoint testing every second
-- **Event Notifications**: Real-time breakpoint hits and execution changes
-- **Visual Feedback**: UI status display and console output
-
-For detailed testing instructions, see [TESTING_DEBUGGER.md](TESTING_DEBUGGER.md).
+6. Wait for automatic breakpoint triggers
 
 ## Troubleshooting
 
@@ -354,13 +346,10 @@ This fork adds several new files to the original project:
 ### Testing and Documentation
 - `test_main_scene.tscn` - **Test scene for debugger functionality**
 - `test_debugger.gd` - **Test script with breakpoint testing**
-- `DEBUGGER_INTEGRATION.md` - **Comprehensive debugger documentation**
-- `TESTING_DEBUGGER.md` - **Step-by-step testing guide**
-- `AGENTS.md` - **Updated development guidelines**
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request to the [GitHub repository](https://github.com/waefrebeorn/godot-mcp).
+Contributions are welcome! Please feel free to submit a Pull Request to the [GitHub repository](https://github.com/nguyenchiencong/godot-mcp).
 
 ## Documentation
 

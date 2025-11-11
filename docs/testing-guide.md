@@ -178,6 +178,14 @@ All examples assume:
   ```
 - **Expected Outcome**: Recent editor log output or a message noting that no output is available.
 
+### get_editor_errors
+- **Setup**: Trigger a script/runtime error (e.g., run a scene with a `push_error()` in `_ready()`) so the Errors tab has content, or proceed without setup to confirm an empty tab report.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run get_editor_errors
+  ```
+- **Expected Outcome**: Either the list of error lines plus capture diagnostics (control path, timestamp, etc.) or confirmation that the Errors tab is empty.
+
 ### get_runtime_scene_structure
 - **Setup**: Run the project (or attach the debugger) so that a runtime session is active.
 - **Command**:

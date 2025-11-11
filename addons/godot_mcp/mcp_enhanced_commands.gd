@@ -13,6 +13,9 @@ func process_command(client_id: int, command_type: String, params: Dictionary, c
 		"get_debug_output":
 			_handle_get_debug_output(client_id, params, command_id)
 			return true
+		"get_editor_errors":
+			_handle_get_editor_errors(client_id, params, command_id)
+			return true
 		"update_node_transform":
 			_handle_update_node_transform(client_id, params, command_id)
 			return true
@@ -271,6 +274,14 @@ func _handle_get_debug_output(client_id: int, _params: Dictionary, command_id: S
 	
 	_send_success(client_id, result, command_id)
 
+func _handle_get_editor_errors(client_id: int, _params: Dictionary, command_id: String) -> void:
+	var snapshot := _capture_editor_errors_snapshot()
+	var diagnostics := snapshot.get("diagnostics", {})
+	if diagnostics.has("error"):
+		_send_error(client_id, "Failed to read Errors tab: %s" % diagnostics["error"], command_id)
+		return
+	_send_success(client_id, snapshot, command_id)
+
 func get_debug_output() -> Dictionary:
 	var output := ""
 	var publisher := _get_debug_output_publisher()
@@ -338,6 +349,265 @@ func _get_debug_output_publisher() -> MCPDebugOutputPublisher:
 		if publisher and publisher is MCPDebugOutputPublisher:
 			return publisher
 	return null
+
+func _capture_editor_errors_snapshot() -> Dictionary:
+	var publisher := _get_debug_output_publisher()
+	if publisher and publisher.has_method("get_errors_panel_snapshot"):
+		return publisher.get_errors_panel_snapshot()
+
+	var diagnostics := {
+		"timestamp": Time.get_ticks_msec()
+	}
+
+	if not Engine.is_editor_hint():
+		diagnostics["error"] = "editor_only"
+		return {
+			"text": "",
+			"lines": [],
+			"line_count": 0,
+			"diagnostics": diagnostics
+		}
+
+	var search_roots: Array = []
+	var editor_node = Engine.get_singleton("EditorNode") if Engine.has_singleton("EditorNode") else null
+	if editor_node:
+		if editor_node.has_method("get_log"):
+			var editor_log = editor_node.call("get_log")
+			if is_instance_valid(editor_log):
+				search_roots.append(editor_log)
+		search_roots.append(editor_node)
+
+	var plugin = Engine.get_meta("GodotMCPPlugin") if Engine.has_meta("GodotMCPPlugin") else null
+	if plugin and plugin is EditorPlugin:
+		var editor_interface = plugin.get_editor_interface()
+		if editor_interface and editor_interface.has_method("get_base_control"):
+			var base_control = editor_interface.call("get_base_control")
+			if is_instance_valid(base_control):
+				search_roots.append(base_control)
+
+	var scene_tree := get_tree()
+	if scene_tree:
+		var tree_root := scene_tree.get_root()
+		if is_instance_valid(tree_root):
+			search_roots.append(tree_root)
+
+	var aggregated_summary: Array = []
+	var tab_info := {}
+	for root in search_roots:
+		tab_info = _find_errors_tab_in_editor_log(root)
+		var summary := String(tab_info.get("summary", ""))
+		if not summary.is_empty():
+			aggregated_summary.append(summary)
+		if tab_info.has("control"):
+			break
+	if aggregated_summary.size() > 0:
+		diagnostics["search_summary"] = " | ".join(aggregated_summary)
+	else:
+		diagnostics["search_summary"] = ""
+
+	if tab_info.is_empty() or not tab_info.has("control"):
+		diagnostics["error"] = "errors_tab_not_found"
+		return {
+			"text": "",
+			"lines": [],
+			"line_count": 0,
+			"diagnostics": diagnostics
+		}
+
+	var tab_control: Control = tab_info.get("control")
+	if not is_instance_valid(tab_control):
+		diagnostics["error"] = "tab_control_invalid"
+		return {
+			"text": "",
+			"lines": [],
+			"line_count": 0,
+			"diagnostics": diagnostics
+		}
+
+	diagnostics["tab_title"] = tab_info.get("tab_title", "")
+	if tab_control.is_inside_tree():
+		diagnostics["control_path"] = String(tab_control.get_path())
+	else:
+		diagnostics["control_path"] = ""
+
+	var lines: Array = []
+	var text := ""
+	var tree := _locate_descendant_tree(tab_control)
+	if tree:
+		if tree.is_inside_tree():
+			diagnostics["tree_path"] = String(tree.get_path())
+		lines = _collect_tree_lines(tree)
+		text = "\n".join(lines)
+	else:
+		text = _extract_text_from_control_local(tab_control)
+		if not text.is_empty():
+			lines = text.split("\n", false)
+
+	return {
+		"text": text,
+		"lines": lines,
+		"line_count": lines.size(),
+		"diagnostics": diagnostics
+	}
+
+func _find_errors_tab_in_editor_log(root: Node) -> Dictionary:
+	var queue: Array = []
+	var summary: Array = []
+	if is_instance_valid(root):
+		queue.append(root)
+	else:
+		return {}
+
+	var visited := 0
+	while queue.size() > 0:
+		var candidate = queue.pop_front()
+		if not is_instance_valid(candidate):
+			continue
+		visited += 1
+
+		if candidate is TabContainer:
+			var tab_container: TabContainer = candidate
+			var tab_count: int = tab_container.get_tab_count() if tab_container.has_method("get_tab_count") else tab_container.get_child_count()
+			for i in range(tab_count):
+				var title := ""
+				if tab_container.has_method("get_tab_title"):
+					title = String(tab_container.get_tab_title(i))
+				var title_lower := title.to_lower()
+				if title_lower.find("error") != -1:
+					var tab_control: Control = null
+					if tab_container.has_method("get_tab_control"):
+						tab_control = tab_container.get_tab_control(i)
+					if not is_instance_valid(tab_control) and i < tab_container.get_child_count():
+						var child = tab_container.get_child(i)
+						if child is Control:
+							tab_control = child
+
+					if is_instance_valid(tab_control):
+						tab_control = _unwrap_single_child_control(tab_control)
+						summary.append("tab_found=%s" % title)
+						summary.append("visited=%d" % visited)
+						return {
+							"control": tab_control,
+							"tab_title": title,
+							"summary": "; ".join(summary)
+						}
+		for child in candidate.get_children():
+			if child is Node:
+				queue.append(child)
+
+	return {"summary": "; ".join(summary)}
+
+func _unwrap_single_child_control(control: Control) -> Control:
+	if not is_instance_valid(control):
+		return control
+
+	var current := control
+	var safety := 0
+	while safety < 5 and current.get_child_count() == 1:
+		var child = current.get_child(0)
+		if child is Control:
+			current = child
+			safety += 1
+		else:
+			break
+
+	if current.get_child_count() > 1:
+		for child in current.get_children():
+			if child is Control and (_is_text_display_control_local(child)):
+				return child
+
+	return current
+
+func _locate_descendant_tree(root: Node, max_nodes: int = 8192) -> Tree:
+	if not is_instance_valid(root):
+		return null
+	var queue: Array = [root]
+	var visited := 0
+	while queue.size() > 0 and visited < max_nodes:
+		var candidate = queue.pop_front()
+		visited += 1
+		if not is_instance_valid(candidate):
+			continue
+		if candidate is Tree:
+			return candidate
+		for child in candidate.get_children():
+			if child is Node:
+				queue.append(child)
+	return null
+
+func _collect_tree_lines(tree: Tree) -> Array:
+	var lines: Array = []
+	if not is_instance_valid(tree):
+		return lines
+	var root := tree.get_root()
+	if not root:
+		return lines
+	var item := root.get_first_child()
+	var column_count: int = tree.columns
+	while item:
+		_collect_tree_item_lines(item, lines, 0, column_count)
+		item = item.get_next()
+	return lines
+
+func _collect_tree_item_lines(item: TreeItem, lines: Array, depth: int, column_count: int) -> void:
+	if not is_instance_valid(item):
+		return
+
+	var parts: Array = []
+	if item.has_meta("_is_warning"):
+		parts.append("[warning]")
+	elif item.has_meta("_is_error"):
+		parts.append("[error]")
+
+	var primary := item.get_text(0)
+	if not primary.is_empty():
+		parts.append(primary)
+
+	for col in range(1, column_count):
+		var extra := item.get_text(col)
+		if not extra.is_empty():
+			parts.append(extra)
+
+	if parts.size() > 0:
+		var prefix := _make_indent_local(depth)
+		lines.append(prefix + " ".join(parts))
+
+	var child := item.get_first_child()
+	while child:
+		_collect_tree_item_lines(child, lines, depth + 1, column_count)
+		child = child.get_next()
+
+func _is_text_display_control_local(control: Control) -> bool:
+	if not is_instance_valid(control):
+		return false
+	return control.is_class("TextEdit") or control.is_class("CodeEdit") or control.is_class("RichTextLabel")
+
+func _extract_text_from_control_local(control: Object) -> String:
+	if not is_instance_valid(control):
+		return ""
+
+	if control.has_method("get_parsed_text"):
+		return String(control.call("get_parsed_text"))
+	if control.has_method("get_text"):
+		return String(control.call("get_text"))
+	if control.has_method("get_full_text"):
+		return String(control.call("get_full_text"))
+	if control.has_method("get_line_count") and control.has_method("get_line"):
+		var lines: Array = []
+		var count := int(control.call("get_line_count"))
+		for i in range(count):
+			lines.append(String(control.call("get_line", i)))
+		return "\n".join(lines)
+	return ""
+
+func _make_indent_local(depth: int) -> String:
+	if depth <= 0:
+		return ""
+	var spaces := depth * 2
+	var builder := ""
+	for i in range(spaces):
+		builder += " "
+	return builder
 
 # ---- Node Transform Commands ----
 

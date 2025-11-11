@@ -562,6 +562,27 @@ Show me the latest debug logs from the editor.
 - Review custom `print()` output triggered through `execute_editor_script`.
 - Share runtime diagnostics with collaborators or automated agents, including metadata that explains where the text was sourced (editor control, debugger fallback, log file).
 
+### get_editor_errors
+Read the Errors tab that appears beside Output/Debugger in the editor bottom panel.
+
+**Parameters:** None
+
+**Example:**
+```
+List the errors currently shown in the Errors tab and include whatever diagnostics you have about their source.
+```
+
+**Response Contains**
+- `text` - Full Errors tab text.
+- `lines` - Array of individual lines (when available).
+- `line_count` - Number of lines parsed from the control.
+- `diagnostics` - Metadata describing how the Errors tab text was captured (`control_path`, `control_class`, `timestamp`, `search_summary`, etc.).
+
+**Use Cases**
+- Capture script/runtime errors without leaving the MCP conversation.
+- Provide supporting evidence when explaining crashes or failed evaluations.
+- Verify that recent warnings have been resolved by re-running the command and checking that the tab is empty.
+
 ### subscribe_debug_output / unsubscribe_debug_output
 Register or remove a live subscription to the Output panel feed. Once subscribed, incremental log frames are pushed asynchronously over the MCP WebSocket connection; they appear in the MCP server console by default.
 

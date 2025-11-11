@@ -255,6 +255,7 @@ Get comprehensive debugger state information.
 - `get_runtime_scene_structure` - Returns the runtime scene hierarchy from the running game (requires active debugger session)
 - `evaluate_runtime` - Evaluates a GDScript expression inside the running game via the debugger bridge (requires the runtime autoload helper)
 - `get_debug_output` - Retrieves debug logs from editor
+- `get_editor_errors` - Reads the Errors tab from the Godot editor bottom panel
 - `update_node_transform` - Updates node position, rotation, and scale
 - `list_assets_by_type` - Lists project assets by type
 

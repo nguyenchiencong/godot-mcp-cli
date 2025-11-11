@@ -180,6 +180,61 @@ export const enhancedTools: MCPTool[] = [
     },
   },
   {
+    name: 'get_editor_errors',
+    description: 'Read the Errors tab from the Godot editor bottom panel.',
+    parameters: z.object({}),
+    execute: async (): Promise<string> => {
+      const godot = getGodotConnection();
+
+      try {
+        const result = await godot.sendCommand('get_editor_errors', {});
+        const text: string = typeof result?.text === 'string' ? result.text : '';
+        const lines: string[] = Array.isArray(result?.lines)
+          ? result.lines.map((line: unknown) => String(line))
+          : (text.length > 0 ? text.split('\n') : []);
+        const lineCount: number = typeof result?.line_count === 'number'
+          ? result.line_count
+          : lines.length;
+
+        const diagnostics: Record<string, unknown> = typeof result?.diagnostics === 'object' && result?.diagnostics !== null
+          ? result.diagnostics as Record<string, unknown>
+          : {};
+
+        const detailLines: string[] = [];
+        if (typeof diagnostics.control_path === 'string' && diagnostics.control_path.length > 0) {
+          detailLines.push(`Control path: ${diagnostics.control_path}`);
+        } else if (typeof diagnostics.control_class === 'string' && diagnostics.control_class.length > 0) {
+          detailLines.push(`Control class: ${diagnostics.control_class}`);
+        }
+        if (typeof diagnostics.timestamp === 'number') {
+          detailLines.push(`Captured: ${new Date(diagnostics.timestamp).toISOString()}`);
+        }
+        if (typeof diagnostics.search_summary === 'string' && diagnostics.search_summary.length > 0) {
+          detailLines.push(`Search summary: ${diagnostics.search_summary}`);
+        }
+
+        if (text.length === 0) {
+          return detailLines.length > 0
+            ? `Errors tab is empty.\n${detailLines.join('\n')}`
+            : 'Errors tab is empty.';
+        }
+
+        const headerSections: string[] = [
+          'Errors Tab Contents',
+          `Lines: ${lineCount}`
+        ];
+        if (detailLines.length > 0) {
+          headerSections.push(detailLines.join(' | '));
+        }
+
+        const body = lines.length > 0 ? lines.join('\n') : text;
+        return `${headerSections.join('\n')}\n\n${body}`;
+      } catch (error) {
+        throw new Error(`Failed to read Errors tab: ${(error as Error).message}`);
+      }
+    },
+  },
+  {
     name: 'evaluate_runtime_expression',
     description: 'Evaluate a GDScript expression inside the running game via the remote debugger',
     parameters: z.object({

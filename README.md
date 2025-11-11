@@ -120,7 +120,7 @@ Add a cube in the middle of the scene and then make a camera that is looking at 
 Create an enemy AI that patrols between waypoints and attacks the player when in range.
 ```
 
-### New Enhanced Commands Examples
+### Enhanced Commands Examples
 
 ```
 @mcp godot-mcp read godot://script/res://scripts/player.gd
@@ -193,16 +193,6 @@ Step over the current line while debugging.
 
 Get comprehensive debugger state information.
 ```
-
-### Natural Language Tasks Claude Can Perform
-
-- "Create a main menu with play, options, and quit buttons"
-- "Add collision detection to the player character"
-- "Implement a day/night cycle system"
-- "Refactor this code to use signals instead of direct references"
-- "Debug why my player character falls through the floor sometimes"
-- "Show me the full structure of my scene tree and explain the relationships"
-- "Generate a script for enemy AI that follows the player"
 
 ## Available Resources and Commands
 

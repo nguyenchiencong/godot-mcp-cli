@@ -99,30 +99,18 @@ func _handle_command(client_id: int, command: Dictionary) -> void:
 		# Try to find enhanced commands processor first
 		for processor in _command_processors:
 			if processor.get_script() and processor.get_script().resource_path.ends_with("mcp_enhanced_commands.gd"):
-				var handled = processor.process_command(client_id, command_type, params, command_id)
-				if handled is bool:
-					if handled:
-						print("Command %s handled by Enhanced Commands processor" % command_type)
-						return
-				elif handled != null:
-					var awaited_state = await handled
-					if awaited_state:
-						print("Command %s handled by Enhanced Commands processor" % command_type)
-						return
+				var handled = await _call_processor(processor, client_id, command_type, params, command_id)
+				if handled:
+					print("Command %s handled by Enhanced Commands processor" % command_type)
+					return
 	
 	# Try each processor until one handles the command
 	for processor in _command_processors:
-		var handled = processor.process_command(client_id, command_type, params, command_id)
-		if handled is bool:
-			if handled:
-				print("Command %s handled by %s" % [command_type, processor.get_class()])
-				return
-		elif handled != null:
-			var awaited_state = await handled
-			if awaited_state:
-				print("Command %s handled by %s" % [command_type, processor.get_class()])
-				return
-	
+		var handled = await _call_processor(processor, client_id, command_type, params, command_id)
+		if handled:
+			print("Command %s handled by %s" % [command_type, processor.get_class()])
+			return
+
 	# If no processor handled the command, send an error
 	_send_error(client_id, "Unknown command: %s" % command_type, command_id)
 
@@ -137,3 +125,17 @@ func _send_error(client_id: int, message: String, command_id: String) -> void:
 	
 	_websocket_server.send_response(client_id, response)
 	print("Error: %s" % message)
+
+func _processor_requires_await(processor: Node) -> bool:
+	if processor is MCPDebuggerCommands:
+		return true
+	if processor.get_script():
+		var path := String(processor.get_script().resource_path)
+		if path.ends_with("mcp_enhanced_commands.gd"):
+			return true
+	return false
+
+func _call_processor(processor: Node, client_id: int, command_type: String, params: Dictionary, command_id: String) -> bool:
+	if _processor_requires_await(processor):
+		return await processor.process_command(client_id, command_type, params, command_id)
+	return processor.process_command(client_id, command_type, params, command_id)

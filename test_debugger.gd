@@ -39,7 +39,6 @@ func _print_debug_info():
 		"node_name": name,
 		"scene_path": scene_file_path
 	}
-
 	print("[Debugger Test] Debug info: ", debug_info)
 
 	# Another good breakpoint location
@@ -58,10 +57,37 @@ func _input(event):
 		match event.keycode:
 			KEY_SPACE:
 				print("[Debugger Test] Space pressed - manual pause point")
-				# Good place for manual breakpoint testing
+				# # Good place for manual breakpoint testing
+				# breakpoint
+				# Trigger error to test stack frames
+				cause_intentional_error()
 			KEY_R:
 				print("[Debugger Test] Resetting counter")
 				_counter = 0
 			KEY_T:
-				print("[Debugger Test] Triggering test function")
-				_test_function_call()
+				print("[Debugger Test] Triggering stack dump error path")
+				_trigger_stack_error()
+
+func cause_intentional_error():
+	# This function will trigger an error to test stack frames
+	var invalid_dict = {"key": "value"}
+	# Try to access a non-existent key that will cause a runtime error
+	invalid_dict.non_existent_method_call()
+
+func _trigger_stack_error():
+	# Build a multi-layer call stack to exercise debugger stack frames
+	_stack_layer_one(5)
+
+func _stack_layer_one(value: int):
+	_stack_layer_two(value + 1)
+
+func _stack_layer_two(value: int):
+	if value > 0:
+		_stack_layer_three(str(value))
+
+func _stack_layer_three(label: String):
+	print("[Debugger Test] Initiating intentional error chain with label: ", label)
+	print("[Debugger Test] STACK_DUMP_BEGIN")
+	print_stack()
+	print("[Debugger Test] STACK_DUMP_END")
+	cause_intentional_error()

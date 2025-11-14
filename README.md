@@ -15,6 +15,7 @@ A comprehensive integration between Godot Engine and AI assistants using the Mod
 - **Scene Operations**: Open, save, and create scenes; query project info and current scene state
 - **Asset Management**: List assets by type and enumerate project files
 - **Debug Output Access**: Snapshot logs with `get_debug_output` or tail them live via `stream_debug_output`
+- **Stack Trace Capture**: Pull the editor's Stack Trace text or grab structured frames via `get_stack_trace_panel` / `get_stack_frames_panel`
 - **Editor Automation**: Execute GDScript in editor context via `execute_editor_script`
 
 ### **Debugger Integration**
@@ -51,7 +52,14 @@ npm run build
 cd ..
 ```
 
-### 3. Set Up Coding Assistant
+### 3. Add the Plugin to your Godot Project
+
+1. Copy the `addons/godot_mcp` folder to your Godot project's `addons` directory
+2. Open your project in Godot
+3. Go to Project > Project Settings > Plugins
+4. Enable the "Godot MCP" plugin
+
+### 4. Set Up Coding Assistant
 
 1. Add the following configuration (or use the included `mcp.json` as a reference):
 
@@ -75,13 +83,13 @@ For STDIO:
 For SSE: don't forget to build the server accordingly and start with npm start
 ```json
 {
-"mcpServers": {
-  "godot-mcp": {
-    "url": "http://localhost:8083/sse",
-    "disabled": false,
-    "alwaysAllow": []
+  "mcpServers": {
+    "godot-mcp": {
+      "url": "http://localhost:8083/sse",
+      "disabled": false,
+      "alwaysAllow": []
+    }
   }
-}
 }
 ```
 > **Note**: Replace `PATH_TO_YOUR_PROJECT` with the absolute path to where you have this repository stored.
@@ -89,7 +97,7 @@ For SSE: don't forget to build the server accordingly and start with npm start
 
 2. Restart the coding assistant
 
-### 4. Open the Example Project in Godot
+### There's already an Example Project in this repository
 
 1. Open Godot Engine
 2. Select "Import" and navigate to the cloned repository
@@ -245,7 +253,11 @@ Get comprehensive debugger state information.
 - `get_runtime_scene_structure` - Returns the runtime scene hierarchy from the running game (requires active debugger session)
 - `evaluate_runtime` - Evaluates a GDScript expression inside the running game via the debugger bridge (requires the runtime autoload helper)
 - `get_debug_output` - Retrieves debug logs from editor
+- `get_stack_trace_panel` - Captures the Stack Trace panel contents along with parsed stack frames
+- `get_stack_frames_panel` - Returns structured stack frame information from the debugger bridge cache
 - `get_editor_errors` - Reads the Errors tab from the Godot editor bottom panel
+- `clear_debug_output` - Clears the Output panel and resets streaming baselines
+- `stream_debug_output` - Subscribes to or unsubscribes from live Output panel streaming
 - `update_node_transform` - Updates node position, rotation, and scale
 - `list_assets_by_type` - Lists project assets by type
 
@@ -308,15 +320,6 @@ The project includes a comprehensive test setup for debugging:
 - Make sure the code execution actually reaches the breakpoint line
 - Check console output for any debugger errors
 - Test with the provided `test_debugger.gd` script to verify functionality
-
-## Adding the Plugin to Your Own Godot Project
-
-If you want to use the MCP plugin in your own Godot project:
-
-1. Copy the `addons/godot_mcp` folder to your Godot project's `addons` directory
-2. Open your project in Godot
-3. Go to Project > Project Settings > Plugins
-4. Enable the "Godot MCP" plugin
 
 ## New Files Added in This Fork
 

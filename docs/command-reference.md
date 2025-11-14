@@ -583,6 +583,30 @@ List the errors currently shown in the Errors tab and include whatever diagnosti
 - Provide supporting evidence when explaining crashes or failed evaluations.
 - Verify that recent warnings have been resolved by re-running the command and checking that the tab is empty.
 
+### get_stack_trace_panel
+Capture the Stack Trace tab content along with parsed stack frames whenever execution pauses.
+
+**Parameters**
+- `session_id` (optional) – Debugger session identifier to associate with the capture. Defaults to the active session reported by Godot.
+
+**Example**
+```
+@mcp godot-mcp run get_stack_trace_panel
+```
+
+**Response Contains**
+- `stack_trace_panel.text` – Raw text extracted from the Stack Trace panel.
+- `stack_trace_panel.lines` – Individual lines when the panel control supports them.
+- `stack_trace_panel.frames` – Array of parsed frames with `index`, `function`, `script`, `line`, and original column data.
+- `stack_trace_panel.diagnostics` – Metadata such as capture timestamp, control path, and search summary.
+- `session_id` – Session the capture is associated with (when available).
+- `debugger_state` – Snapshot of the debugger’s current state (active sessions, paused flag, etc.).
+
+**Use Cases**
+- When an error pauses execution, grab the same Stack Trace view shown in the editor for sharing with collaborators or tooling.
+- Extract structured frame data for automated reasoning (e.g., highlight scripts/lines that need fixes).
+- Confirm that the Stack Trace panel is empty again after resolving an exception.
+
 ### subscribe_debug_output / unsubscribe_debug_output
 Register or remove a live subscription to the Output panel feed. Once subscribed, incremental log frames are pushed asynchronously over the MCP WebSocket connection; they appear in the MCP server console by default.
 
@@ -608,11 +632,53 @@ Register or remove a live subscription to the Output panel feed. Once subscribed
 
 > **Tip:** The enhanced MCP tool `stream_debug_output` wraps these commands with an `action` parameter (`"start"`/`"stop"`). When the stream is active, each new line appears in the MCP server console prefixed with `[Godot Debug] ...`.
 
+### get_stack_frames_panel
+Return the structured stack frames for a paused debugger session as reported by the debugger bridge cache.
+
+**Parameters**
+- `session_id` (optional) – Target debugger session. Defaults to the active session.
+- `refresh` (optional, boolean) – If `true`, requests a fresh `get_stack_dump` before reading the cache (the response still returns the cached frames available when the command finishes).
+
+**Example**
+```
+@mcp godot-mcp run get_stack_frames_panel --refresh true
+```
+
+**Response Contains**
+- `frames` – Array of frame objects (`index`, `function`, `script`, `line`, etc.).
+- `stack_info` – The raw bridge snapshot including `total_frames`, `current_frame`, and any additional metadata.
+- `diagnostics` – Session ID, cache source, and warnings when no frames are available.
+
+**Use Cases**
+- Retrieve a machine-friendly call stack even when the Stack Trace UI is empty.
+- Compare the UI output with the debugger bridge cache during CI or automated testing.
+
 **Manual Test**
 1. `@mcp godot-mcp run stream_debug_output {"action":"start"}` — the client reports that the subscription is active.
 2. Trigger fresh output in Godot (e.g., `push_error("Stream test")` or a `print()`).
 3. Confirm the MCP console shows `[Godot Debug] Stream test`.
 4. `@mcp godot-mcp run stream_debug_output {"action":"stop"}` — no further log lines are emitted after unsubscribing.
+
+### clear_debug_output
+Clear the editor Output panel and reset the streaming baseline so subscribers receive a fresh log.
+
+**Parameters:** None
+
+**Example**
+```
+@mcp godot-mcp run clear_debug_output
+```
+
+**Response Contains**
+- `cleared` – `true` if the Output panel text was erased successfully.
+- `method` – Which strategy succeeded (`editor_log_clear`, `control_clear`, etc.).
+- `diagnostics` – Attempts, timestamp, and any errors encountered while looking for the control.
+- `message` – Human-friendly summary of the action taken.
+
+**Use Cases**
+- Reset noisy logs before starting a fresh debug capture.
+- Force `stream_debug_output` subscribers to treat subsequent frames as a clean slate (a reset frame is broadcast automatically).
+- Quickly confirm that the Output panel can be controlled programmatically from an MCP workflow.
 
 ### update_node_transform
 Adjust a node’s position, rotation, or scale from the editor.

@@ -2,6 +2,12 @@
 class_name MCPEditorScriptCommands
 extends MCPBaseCommandProcessor
 
+const EXECUTION_TIMEOUT_SECONDS := 1.5
+const MAX_LOG_TAIL_CHARS := 2048
+const MAX_LOG_TAIL_LINES := 20
+
+var _pending_executions := {}
+
 func process_command(client_id: int, command_type: String, params: Dictionary, command_id: String) -> bool:
 	match command_type:
 		"execute_editor_script":
@@ -34,6 +40,8 @@ func _execute_editor_script(client_id: int, params: Dictionary, command_id: Stri
 	
 	# Fix common API incompatibilities
 	code = _fix_api_compatibility(code)
+
+	var parse_log_snapshot = _capture_log_snapshot()
 	
 	# Create a temporary script node to execute the code
 	var script_node := Node.new()
@@ -135,9 +143,13 @@ func _execute_code():
 	# Check for script errors during parsing
 	var error = script.reload()
 	if error != OK:
+		var parse_tail = _extract_log_tail(parse_log_snapshot)
+		var parse_message = "Script parsing error: " + str(error)
+		if not parse_tail.is_empty():
+			parse_message += "\n" + "\n".join(parse_tail)
 		remove_child(script_node)
 		script_node.queue_free()
-		return _send_error(client_id, "Script parsing error: " + str(error), command_id)
+		return _send_error(client_id, parse_message, command_id)
 	
 	# Assign the script to the node
 	script_node.set_script(script)
@@ -145,11 +157,17 @@ func _execute_code():
 	# Connect to the execution_completed signal
 	script_node.connect("execution_completed", _on_script_execution_completed.bind(script_node, client_id, command_id))
 
+	var execution_log_snapshot = _capture_log_snapshot()
+	_track_pending_execution(script_node, client_id, command_id, execution_log_snapshot)
 	script_node.run()
 
 
 # Signal handler for when script execution completes
 func _on_script_execution_completed(script_node: Node, client_id: int, command_id: String) -> void:
+	var pending = _pop_pending_execution(script_node)
+	var log_snapshot = pending.get("log_snapshot", {})
+	var log_tail = _extract_log_tail(log_snapshot)
+	
 	# Collect results safely by checking if properties exist
 	var execution_result = script_node.get("result")
 	var output = script_node._output_array
@@ -169,6 +187,8 @@ func _on_script_execution_completed(script_node: Node, client_id: int, command_i
 	
 	if not error_message.is_empty():
 		result_data["error"] = error_message
+		if not log_tail.is_empty():
+			result_data["debug_log_tail"] = log_tail
 	elif execution_result != null:
 		result_data["result"] = execution_result
 	
@@ -176,25 +196,170 @@ func _on_script_execution_completed(script_node: Node, client_id: int, command_i
 
 # Replace print() calls with custom_print() in the user code
 func _replace_print_calls(code: String) -> String:
-	var regex = RegEx.new()
-	# Match print statements with any content inside the parentheses
-	regex.compile("print\\s*\\(([^\\)]+)\\)")
+	var modified_code := ""
+	var search_index := 0
 	
-	var result = regex.search_all(code)
-	var modified_code = code
-	
-	# Process matches in reverse order to avoid issues with changing string length
-	for i in range(result.size() - 1, -1, -1):
-		var match_obj = result[i]
-		var full_match = match_obj.get_string()
-		var arg_content = match_obj.get_string(1)
+	while search_index < code.length():
+		var match_index = code.find("print", search_index)
+		if match_index == -1:
+			modified_code += code.substr(search_index)
+			break
 		
-		# Create an array with all arguments
-		var replacement = "custom_print([" + arg_content + "])"
+		modified_code += code.substr(search_index, match_index - search_index)
+		var prev_char = code.substr(match_index - 1, 1) if match_index > 0 else ""
+		var next_char = code.substr(match_index + 5, 1) if match_index + 5 < code.length() else ""
 		
-		var start = match_obj.get_start()
-		var end = match_obj.get_end()
+		if _is_identifier_char(prev_char) or _is_identifier_char(next_char):
+			modified_code += "print"
+			search_index = match_index + 5
+			continue
 		
-		modified_code = modified_code.substr(0, start) + replacement + modified_code.substr(end)
+		var paren_index = _skip_whitespace(code, match_index + 5)
+		if paren_index >= code.length() or code[paren_index] != "(":
+			modified_code += "print"
+			search_index = match_index + 5
+			continue
+		
+		var closing_index = _find_matching_paren(code, paren_index)
+		if closing_index == -1:
+			modified_code += code.substr(match_index)
+			break
+		
+		var inner_content = code.substr(paren_index + 1, closing_index - paren_index - 1)
+		modified_code += "custom_print([" + inner_content + "])"
+		search_index = closing_index + 1
 	
 	return modified_code
+
+func _skip_whitespace(text: String, start_index: int) -> int:
+	var index = start_index
+	while index < text.length():
+		var char = text.substr(index, 1)
+		if char != " " and char != "\t" and char != "\n" and char != "\r":
+			break
+		index += 1
+	return index
+
+func _is_identifier_char(char: String) -> bool:
+	if char.is_empty():
+		return false
+	var code_point = char.unicode_at(0)
+	var is_digit = code_point >= 48 and code_point <= 57
+	var is_lower = code_point >= 97 and code_point <= 122
+	var is_upper = code_point >= 65 and code_point <= 90
+	return is_digit or is_lower or is_upper or char == "_"
+
+func _find_matching_paren(text: String, open_index: int) -> int:
+	var depth = 1
+	var index = open_index + 1
+	var in_string = false
+	var string_delimiter = ""
+	var escape_next = false
+	
+	while index < text.length():
+		var char = text[index]
+		if in_string:
+			if escape_next:
+				escape_next = false
+			elif char == "\\":
+				escape_next = true
+			elif char == string_delimiter:
+				in_string = false
+		else:
+			if char == "\"" or char == "'":
+				in_string = true
+				string_delimiter = char
+			elif char == "(":
+				depth += 1
+			elif char == ")":
+				depth -= 1
+				if depth == 0:
+					return index
+		index += 1
+	return -1
+
+func _get_debug_output_publisher():
+	if Engine.has_meta("MCPDebugOutputPublisher"):
+		var publisher = Engine.get_meta("MCPDebugOutputPublisher")
+		if publisher and publisher.has_method("get_full_log_text"):
+			return publisher
+	return null
+
+func _capture_log_snapshot() -> Dictionary:
+	var publisher = _get_debug_output_publisher()
+	if publisher == null:
+		return {}
+	var text = publisher.get_full_log_text()
+	return {
+		"publisher": publisher,
+		"length": text.length()
+	}
+
+func _extract_log_tail(snapshot: Dictionary) -> Array:
+	if snapshot.is_empty():
+		return []
+	if not snapshot.has("publisher") or not snapshot.has("length"):
+		return []
+	var publisher = snapshot["publisher"]
+	if publisher == null or not publisher.has_method("get_full_log_text"):
+		return []
+	var baseline = int(snapshot["length"])
+	var text = publisher.get_full_log_text()
+	if baseline < 0 or baseline > text.length():
+		baseline = max(0, text.length() - MAX_LOG_TAIL_CHARS)
+	var delta = text.substr(baseline)
+	if delta.length() > MAX_LOG_TAIL_CHARS:
+		delta = delta.substr(delta.length() - MAX_LOG_TAIL_CHARS)
+	delta = delta.strip_edges()
+	if delta.is_empty():
+		return []
+	var lines = delta.split("\n", false)
+	if lines.size() > MAX_LOG_TAIL_LINES:
+		lines = lines.slice(lines.size() - MAX_LOG_TAIL_LINES, lines.size())
+	return lines
+
+func _track_pending_execution(script_node: Node, client_id: int, command_id: String, log_snapshot: Dictionary) -> void:
+	var execution_id = script_node.get_instance_id()
+	var timer := Timer.new()
+	timer.one_shot = true
+	timer.wait_time = EXECUTION_TIMEOUT_SECONDS
+	add_child(timer)
+	timer.connect("timeout", Callable(self, "_on_execution_timeout").bind(execution_id, client_id, command_id))
+	timer.start()
+	_pending_executions[execution_id] = {
+		"client_id": client_id,
+		"command_id": command_id,
+		"log_snapshot": log_snapshot,
+		"timer": timer,
+		"node": script_node
+	}
+
+func _pop_pending_execution(script_node: Node) -> Dictionary:
+	var execution_id = script_node.get_instance_id()
+	if not _pending_executions.has(execution_id):
+		return {}
+	var pending: Dictionary = _pending_executions[execution_id]
+	_pending_executions.erase(execution_id)
+	var timer = pending.get("timer", null)
+	if timer and is_instance_valid(timer):
+		timer.queue_free()
+	return pending
+
+func _on_execution_timeout(execution_id: int, client_id: int, command_id: String) -> void:
+	if not _pending_executions.has(execution_id):
+		return
+	var pending: Dictionary = _pending_executions[execution_id]
+	_pending_executions.erase(execution_id)
+	var timer = pending.get("timer", null)
+	if timer and is_instance_valid(timer):
+		timer.queue_free()
+	var script_node = pending.get("node", null)
+	if script_node and is_instance_valid(script_node):
+		if script_node.is_inside_tree():
+			remove_child(script_node)
+		script_node.queue_free()
+	var log_tail = _extract_log_tail(pending.get("log_snapshot", {}))
+	var message = "Script execution timed out before completion."
+	if not log_tail.is_empty():
+		message += "\n" + "\n".join(log_tail)
+	_send_error(client_id, message, command_id)

@@ -6,8 +6,212 @@ import { MCPTool } from '../utils/types.js';
 /**
  * Enhanced tools for more complex operations in Godot
  */
+
+// Constants
+const MAX_FRAMES_DISPLAY = 10;
+const DEFAULT_INDENT_SIZE = 2;
+
+// Type Definitions
+interface SceneNode {
+  name: string;
+  type: string;
+  children?: SceneNode[];
+  visibility?: {
+    has_visible_method?: boolean;
+    visible?: boolean;
+    visible_in_tree?: boolean;
+  };
+}
+
+interface StackFrame {
+  index?: number | string;
+  function?: string;
+  location?: string;
+  script?: string;
+  line?: number;
+}
+
+interface Diagnostics {
+  error?: string;
+  source?: string;
+  detail?: string;
+  control_class?: string;
+  control_path?: string;
+  tab_title?: string;
+  log_file_path?: string;
+  control_search?: string;
+  timestamp?: number;
+  search_summary?: string;
+  fallback_source?: string;
+  attempts?: unknown[];
+}
+
+interface PanelResult extends Record<string, unknown> {
+  text?: string;
+  lines?: unknown[];
+  line_count?: number;
+  frames?: unknown[];
+  diagnostics?: Diagnostics;
+}
+
+// Utility Functions
+function formatNode(node: SceneNode, depth: number = 0, includeVisibility: boolean = false): string {
+  const indent = ' '.repeat(depth * DEFAULT_INDENT_SIZE);
+  let output = `${indent}${node.name} (${node.type})`;
+
+  if (includeVisibility && node.visibility) {
+    const flags: string[] = [];
+    if (node.visibility.has_visible_method) flags.push('has-visible');
+    if (node.visibility.visible) flags.push('visible');
+    if (node.visibility.visible_in_tree) flags.push('visible-in-tree');
+    if (flags.length > 0) {
+      output += ` [${flags.join(', ')}]`;
+    }
+  }
+
+  if (node.children && node.children.length > 0) {
+    output += '\n';
+    output += node.children
+      .map((child: SceneNode) => formatNode(child, depth + 1, includeVisibility))
+      .join('\n');
+  }
+
+  return output;
+}
+
+function summarizeStackFrame(frame: StackFrame): string {
+  const indexValue = typeof frame.index === 'number'
+    ? frame.index
+    : (typeof frame.index === 'string' && frame.index.length > 0 ? Number(frame.index) : undefined);
+
+  const fnName = typeof frame.function === 'string' && frame.function.length > 0
+    ? frame.function
+    : '(anonymous)';
+
+  const location = typeof frame.location === 'string' && frame.location.length > 0
+    ? frame.location
+    : (() => {
+        const script = typeof frame.script === 'string' ? frame.script : '';
+        const line = typeof frame.line === 'number' ? frame.line : undefined;
+        if (script && line !== undefined) {
+          return `${script}:${line}`;
+        }
+        return script || 'location unavailable';
+      })();
+
+  if (typeof indexValue === 'number' && Number.isFinite(indexValue)) {
+    return `[${indexValue}] ${fnName} — ${location}`;
+  }
+  return `${fnName} — ${location}`;
+}
+
+function formatValue(value: unknown): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+  if (value === null) {
+    return 'null';
+  }
+  if (typeof value === 'string') {
+    return `"${value}"`;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function safeGetDiagnostics(result: Record<string, unknown>): Diagnostics {
+  if (typeof result.diagnostics === 'object' && result.diagnostics !== null) {
+    return result.diagnostics as Diagnostics;
+  }
+  return {};
+}
+
+function safeGetStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(item => String(item));
+  }
+  return [];
+}
+
+function formatEmptyDebugOutput(diagnostics: Diagnostics): string {
+  const source = diagnostics.source || 'unknown';
+  const detail = diagnostics.detail || 'No additional detail from publisher.';
+  const controlClass = diagnostics.control_class || 'unset';
+  const controlPath = diagnostics.control_path || 'unset';
+  const logFilePath = diagnostics.log_file_path || 'not-found';
+  const controlSearch = diagnostics.control_search || 'control search summary unavailable';
+
+  return [
+    'No debug output available.',
+    `Capture source: ${source}`,
+    `Detail: ${detail}`,
+    `Control class: ${controlClass}`,
+    `Control path: ${controlPath}`,
+    `Log file path: ${logFilePath}`,
+    `Control search: ${controlSearch}`,
+  ].join('\n');
+}
+
+function formatPanelHeader(diagnostics: Diagnostics, lineCount: number, frameCount: number, successMessage: string): string[] {
+  const header: string[] = [];
+
+  if (diagnostics.error) {
+    header.push(`${successMessage}: ${diagnostics.error}`);
+  } else {
+    header.push(`${successMessage}.`);
+  }
+
+  header.push(`Lines captured: ${lineCount}`);
+  header.push(`Frames parsed: ${frameCount}`);
+
+  if (diagnostics.control_path) {
+    header.push(`Panel control: ${diagnostics.control_path}`);
+  } else if (diagnostics.control_class) {
+    header.push(`Panel type: ${diagnostics.control_class}`);
+  }
+
+  if (diagnostics.tab_title) {
+    header.push(`Tab title: ${diagnostics.tab_title}`);
+  }
+
+  if (diagnostics.fallback_source) {
+    header.push(`Fallback source: ${diagnostics.fallback_source}`);
+  }
+
+  if (typeof diagnostics.timestamp === 'number') {
+    header.push(`Captured: ${new Date(diagnostics.timestamp).toISOString()}`);
+  }
+
+  if (diagnostics.search_summary) {
+    header.push(`Search summary: ${diagnostics.search_summary}`);
+  }
+
+  return header;
+}
+
+function formatStackFrames(frames: StackFrame[]): string {
+  if (frames.length === 0) {
+    return 'No structured frames were parsed.';
+  }
+
+  return frames
+    .slice(0, MAX_FRAMES_DISPLAY)
+    .map((frame, index) => `#${index}: ${summarizeStackFrame(frame)}`)
+    .join('\n');
+}
+
+// Module state for debug output streaming
 let debugOutputListenerAttached = false;
 
+/**
+ * Enhanced tools for more complex operations in Godot
+ */
 export const enhancedTools: MCPTool[] = [
   {
     name: 'get_editor_scene_structure',
@@ -39,21 +243,16 @@ export const enhancedTools: MCPTool[] = [
           return 'No scene is currently open or the scene is empty.';
         }
 
-        const formatNode = (node: any, depth = 0): string => {
-          const indent = ' '.repeat(depth * 2);
-          let output = `${indent}${node.name} (${node.type})`;
-
-          if (node.children && node.children.length > 0) {
-            output += '\n';
-            output += node.children.map((child: any) => formatNode(child, depth + 1)).join('\n');
-          }
-
-          return output;
-        };
-
-        return `Current Scene: ${result.path}\nRoot Node: ${result.root_node_name} (${result.root_node_type})\n\nScene Tree:\n${formatNode(result.structure)}`;
-      } catch (error) {
-        throw new Error(`Failed to get scene structure: ${(error as Error).message}`);
+        const structure = result.structure as SceneNode;
+        return [
+          `Current Scene: ${result.path}`,
+          `Root Node: ${result.root_node_name} (${result.root_node_type})`,
+          '',
+          'Scene Tree:',
+          formatNode(structure)
+        ].join('\n');
+      } catch (err) {
+        throw new Error(`Failed to get scene structure: ${(err as Error).message}`);
       }
     },
   },
@@ -90,92 +289,43 @@ export const enhancedTools: MCPTool[] = [
           return 'Runtime scene data is unavailable. Ensure the project is running with the debugger attached.';
         }
 
-        const formatNode = (node: any, depth = 0): string => {
-          const indent = ' '.repeat(depth * 2);
-          let output = `${indent}${node.name} (${node.type})`;
-          if (node.visibility) {
-            const flags: string[] = [];
-            if (node.visibility.has_visible_method) flags.push('has-visible');
-            if (node.visibility.visible) flags.push('visible');
-            if (node.visibility.visible_in_tree) flags.push('visible-in-tree');
-            if (flags.length > 0) {
-              output += ` [${flags.join(', ')}]`;
-            }
-          }
-
-          if (node.children && node.children.length > 0) {
-            output += '\n';
-            output += node.children.map((child: any) => formatNode(child, depth + 1)).join('\n');
-          }
-
-          return output;
-        };
-
+        const structure = result.structure as SceneNode;
         const scenePath = result.scene_path || 'Unknown scene';
-        const rootName = result.root_node_name || result.structure?.name || 'Root';
-        const rootType = result.root_node_type || result.structure?.type || 'Node';
+        const rootName = result.root_node_name || structure.name || 'Root';
+        const rootType = result.root_node_type || structure.type || 'Node';
 
         return [
           `Runtime Scene Path: ${scenePath}`,
           `Root Node: ${rootName} (${rootType})`,
           '',
           'Live Scene Tree:',
-          formatNode(result.structure)
+          formatNode(structure, 0, true)
         ].join('\n');
-      } catch (error) {
-        throw new Error(`Failed to get runtime scene structure: ${(error as Error).message}`);
+      } catch (err) {
+        throw new Error(`Failed to get runtime scene structure: ${(err as Error).message}`);
       }
     },
   },
-  
+
   {
     name: 'get_debug_output',
     description: 'Get the debug output from the Godot editor',
     parameters: z.object({}),
     execute: async (): Promise<string> => {
       const godot = getGodotConnection();
-      
+
       try {
         const result = await godot.sendCommand('get_debug_output', {});
-        
-        const outputText: string = typeof result.output === 'string' ? result.output : '';
-        const diagnostics = typeof result.diagnostics === 'object' && result.diagnostics !== null
-          ? result.diagnostics as Record<string, unknown>
-          : {};
+        const outputText = typeof result.output === 'string' ? result.output : '';
+        const diagnostics = safeGetDiagnostics(result);
 
         if (!outputText || outputText.length === 0) {
-          const source = typeof diagnostics.source === 'string' && diagnostics.source.length > 0
-            ? diagnostics.source
-            : 'unknown';
-          const detail = typeof diagnostics.detail === 'string' && diagnostics.detail.length > 0
-            ? diagnostics.detail
-            : 'No additional detail from publisher.';
-          const controlClass = typeof diagnostics.control_class === 'string' && diagnostics.control_class.length > 0
-            ? diagnostics.control_class
-            : 'unset';
-          const controlPath = typeof diagnostics.control_path === 'string' && diagnostics.control_path.length > 0
-            ? diagnostics.control_path
-            : 'unset';
-          const logFilePath = typeof diagnostics.log_file_path === 'string' && diagnostics.log_file_path.length > 0
-            ? diagnostics.log_file_path
-            : 'not-found';
-          const controlSearch = typeof diagnostics.control_search === 'string' && diagnostics.control_search.length > 0
-            ? diagnostics.control_search
-            : 'control search summary unavailable';
-          return [
-            'No debug output available.',
-            `Capture source: ${source}`,
-            `Detail: ${detail}`,
-            `Control class: ${controlClass}`,
-            `Control path: ${controlPath}`,
-            `Log file path: ${logFilePath}`,
-            `Control search: ${controlSearch}`,
-          ].join('\n');
+          return formatEmptyDebugOutput(diagnostics);
         }
-        
+
         return `Debug Output:\n${outputText}`;
-      } catch (error) {
-        throw new Error(`Failed to get debug output: ${(error as Error).message}`);
+      } catch (err) {
+        throw new Error(`Failed to get debug output: ${(err as Error).message}`);
       }
     },
   },
@@ -188,28 +338,24 @@ export const enhancedTools: MCPTool[] = [
 
       try {
         const result = await godot.sendCommand('get_editor_errors', {});
-        const text: string = typeof result?.text === 'string' ? result.text : '';
-        const lines: string[] = Array.isArray(result?.lines)
-          ? result.lines.map((line: unknown) => String(line))
-          : (text.length > 0 ? text.split('\n') : []);
-        const lineCount: number = typeof result?.line_count === 'number'
+        const text = typeof result?.text === 'string' ? result.text : '';
+        const lines = safeGetStringArray(result?.lines);
+        const lineCount = typeof result?.line_count === 'number'
           ? result.line_count
-          : lines.length;
+          : (lines.length > 0 ? lines.length : (text.length > 0 ? text.split('\n').length : 0));
 
-        const diagnostics: Record<string, unknown> = typeof result?.diagnostics === 'object' && result?.diagnostics !== null
-          ? result.diagnostics as Record<string, unknown>
-          : {};
+        const diagnostics = safeGetDiagnostics(result);
 
         const detailLines: string[] = [];
-        if (typeof diagnostics.control_path === 'string' && diagnostics.control_path.length > 0) {
+        if (diagnostics.control_path) {
           detailLines.push(`Control path: ${diagnostics.control_path}`);
-        } else if (typeof diagnostics.control_class === 'string' && diagnostics.control_class.length > 0) {
+        } else if (diagnostics.control_class) {
           detailLines.push(`Control class: ${diagnostics.control_class}`);
         }
         if (typeof diagnostics.timestamp === 'number') {
           detailLines.push(`Captured: ${new Date(diagnostics.timestamp).toISOString()}`);
         }
-        if (typeof diagnostics.search_summary === 'string' && diagnostics.search_summary.length > 0) {
+        if (diagnostics.search_summary) {
           detailLines.push(`Search summary: ${diagnostics.search_summary}`);
         }
 
@@ -219,18 +365,112 @@ export const enhancedTools: MCPTool[] = [
             : 'Errors tab is empty.';
         }
 
-        const headerSections: string[] = [
-          'Errors Tab Contents',
-          `Lines: ${lineCount}`
-        ];
+        const headerSections = ['Errors Tab Contents', `Lines: ${lineCount}`];
         if (detailLines.length > 0) {
           headerSections.push(detailLines.join(' | '));
         }
 
         const body = lines.length > 0 ? lines.join('\n') : text;
         return `${headerSections.join('\n')}\n\n${body}`;
-      } catch (error) {
-        throw new Error(`Failed to read Errors tab: ${(error as Error).message}`);
+      } catch (err) {
+        throw new Error(`Failed to read Errors tab: ${(err as Error).message}`);
+      }
+    },
+  },
+  {
+    name: 'get_stack_trace_panel',
+    description: 'Capture the Godot debugger Stack Trace panel text and structured frames.',
+    parameters: z.object({
+      session_id: z.number().int().optional()
+        .describe('Optional debugger session ID to associate with the capture (defaults to the active session).')
+    }),
+    execute: async ({ session_id }): Promise<string> => {
+      const godot = getGodotConnection();
+
+      const params: Record<string, unknown> = {};
+      if (session_id !== undefined) {
+        params.session_id = session_id;
+      }
+
+      try {
+        const result = await godot.sendCommand('get_stack_trace_panel', params);
+        const panel = (result?.stack_trace_panel ?? {}) as PanelResult;
+        const diagnostics = safeGetDiagnostics(panel);
+        const lines = safeGetStringArray(panel.lines);
+        const frames = Array.isArray(panel.frames) ? panel.frames as StackFrame[] : [];
+        const lineCount = typeof panel.line_count === 'number' ? panel.line_count : lines.length;
+        const resolvedSessionId = typeof result?.session_id === 'number' ? result.session_id : undefined;
+
+        const header = formatPanelHeader(diagnostics, lineCount, frames.length, 'Stack trace panel captured successfully');
+
+        if (resolvedSessionId !== undefined && resolvedSessionId >= 0) {
+          header.push(`Session ID: ${resolvedSessionId}`);
+        }
+
+        const frameSection = formatStackFrames(frames);
+        const body = lines.length > 0
+          ? lines.join('\n')
+          : (typeof panel.text === 'string' && panel.text.length > 0
+            ? panel.text
+            : 'Stack Trace tab is empty.');
+
+        return [
+          header.join('\n'),
+          '',
+          'Parsed Frames:',
+          frameSection,
+          '',
+          'Stack Trace Panel:',
+          body
+        ].join('\n');
+      } catch (err) {
+        throw new Error(`Failed to capture stack trace panel: ${(err as Error).message}`);
+      }
+    },
+  },
+  {
+    name: 'get_stack_frames_panel',
+    description: 'Capture the Stack Frames panel contents (tree or text fallback) from the Godot editor.',
+    parameters: z.object({
+      session_id: z.number().int().optional()
+        .describe('Optional debugger session ID (defaults to the active session).'),
+      refresh: z.boolean().optional()
+        .describe('Request a fresh stack dump from the debugger before capturing.')
+    }),
+    execute: async ({ session_id, refresh }): Promise<string> => {
+      const godot = getGodotConnection();
+
+      const params: Record<string, unknown> = {};
+      if (session_id !== undefined) params.session_id = session_id;
+      if (refresh !== undefined) params.refresh = refresh;
+
+      try {
+        const result = await godot.sendCommand('get_stack_frames_panel', params);
+        const panel = (result?.stack_frames_panel ?? {}) as PanelResult;
+        const diagnostics = safeGetDiagnostics(panel);
+        const lines = safeGetStringArray(panel.lines);
+        const frames = Array.isArray(panel.frames) ? panel.frames as StackFrame[] : [];
+        const lineCount = typeof panel.line_count === 'number' ? panel.line_count : lines.length;
+
+        const header = formatPanelHeader(diagnostics, lineCount, frames.length, 'Stack Frames panel captured successfully');
+        const frameSection = formatStackFrames(frames);
+        const body = lines.length > 0
+          ? lines.join('\n')
+          : (typeof panel.text === 'string' && panel.text.length > 0
+            ? panel.text
+            : 'Stack Frames tab is empty.');
+
+        return [
+          header.join('\n'),
+          '',
+          'Parsed Frames:',
+          frameSection,
+          '',
+          'Stack Frames Panel:',
+          body
+        ].join('\n');
+      } catch (err) {
+        throw new Error(`Failed to capture stack frames panel: ${(err as Error).message}`);
       }
     },
   },
@@ -268,7 +508,7 @@ export const enhancedTools: MCPTool[] = [
 
         const success = result.success !== false;
         const formattedValue = formatValue(result.result);
-        const outputLines: string[] = Array.isArray(result.output) ? result.output.map((line: unknown) => String(line)) : [];
+        const outputLines = safeGetStringArray(result.output);
 
         const sections: string[] = [];
         sections.push(success ? 'Runtime evaluation succeeded.' : 'Runtime evaluation completed with errors.');
@@ -282,8 +522,47 @@ export const enhancedTools: MCPTool[] = [
         }
 
         return sections.join('\n');
-      } catch (error) {
-        throw new Error(`Failed to evaluate expression: ${(error as Error).message}`);
+      } catch (err) {
+        throw new Error(`Failed to evaluate expression: ${(err as Error).message}`);
+      }
+    },
+  },
+  {
+    name: 'clear_debug_output',
+    description: 'Clear the Godot editor Output panel and reset streaming state.',
+    parameters: z.object({}),
+    execute: async (): Promise<string> => {
+      const godot = getGodotConnection();
+
+      try {
+        const result = await godot.sendCommand('clear_debug_output', {});
+        const diagnostics = safeGetDiagnostics(result);
+
+        if (!result?.cleared) {
+          const reason = typeof result?.message === 'string' && result.message.length > 0
+            ? result.message
+            : (diagnostics.error || 'Unknown reason');
+          return `Failed to clear debug output: ${reason}`;
+        }
+
+        const method = typeof result.method === 'string' && result.method.length > 0
+          ? result.method
+          : 'unspecified method';
+        const attempts = Array.isArray(diagnostics.attempts)
+          ? diagnostics.attempts.map(entry => String(entry)).join(', ')
+          : 'n/a';
+        const timestamp = typeof diagnostics.timestamp === 'number'
+          ? new Date(diagnostics.timestamp).toISOString()
+          : 'n/a';
+
+        return [
+          'Debug Output panel cleared successfully.',
+          `Method: ${method}`,
+          `Attempts: ${attempts}`,
+          `Timestamp: ${timestamp}`
+        ].join('\n');
+      } catch (err) {
+        throw new Error(`Failed to clear debug output: ${(err as Error).message}`);
       }
     },
   },
@@ -301,20 +580,22 @@ export const enhancedTools: MCPTool[] = [
         debugOutputListenerAttached = true;
         godot.on('debug_output_frame', frame => {
           try {
-            const lines: string[] = Array.isArray((frame as any)?.lines) ? (frame as any).lines : [];
-            const chunk: string = typeof (frame as any)?.chunk === 'string' ? (frame as any).chunk : '';
-            if ((frame as any)?.reset) {
-              console.error('\n[Godot Debug] Log reset.');
+            const frameData = frame as Record<string, unknown>;
+            const lines = safeGetStringArray(frameData.lines);
+            const chunk = typeof frameData.chunk === 'string' ? frameData.chunk : '';
+
+            if (frameData.reset) {
+              console.log('\n[Godot Debug] Log reset.');
             }
             if (lines.length > 0) {
               for (const line of lines) {
-                console.error(`[Godot Debug] ${line}`);
+                console.log(`[Godot Debug] ${line}`);
               }
             } else if (chunk.length > 0) {
-              console.error(`[Godot Debug] ${chunk}`);
+              console.log(`[Godot Debug] ${chunk}`);
             }
-          } catch (error) {
-            console.error('Failed to print debug frame:', error);
+          } catch (err) {
+            console.error('Failed to print debug frame:', err);
           }
         });
       }
@@ -329,23 +610,3 @@ export const enhancedTools: MCPTool[] = [
     },
   },
 ];
-
-function formatValue(value: unknown): string {
-  if (value === undefined) {
-    return 'undefined';
-  }
-  if (value === null) {
-    return 'null';
-  }
-  if (typeof value === 'string') {
-    return `"${value}"`;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}

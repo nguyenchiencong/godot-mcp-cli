@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * Simple test for debugger_resume_execution command
+ * Simple test for debugger_pause_execution command
  */
 
-import { getGodotConnection } from './dist/utils/godot_connection.js';
-import { debuggerTools } from './dist/tools/debugger_tools.js';
+import { getGodotConnection } from '../dist/utils/godot_connection.js';
+import { debuggerTools } from '../dist/tools/debugger_tools.js';
 
-async function testResumeExecution() {
-  console.log('Testing debugger_resume_execution...');
+async function testPauseExecution() {
+  console.log('Testing debugger_pause_execution...');
 
   try {
     // Connect to Godot
@@ -25,12 +25,12 @@ async function testResumeExecution() {
 
     console.log('✓ Connected to Godot WebSocket server');
 
-    // Test resume execution command
-    console.log('Sending debugger_resume_execution command...');
-    const tool = debuggerTools.find(t => t.name === 'debugger_resume_execution');
+    // Test pause execution command
+    console.log('Sending debugger_pause_execution command...');
+    const tool = debuggerTools.find(t => t.name === 'debugger_pause_execution');
     const result = await tool.execute({});
 
-    console.log('✓ Resume execution command sent successfully');
+    console.log('✓ Pause execution command sent successfully');
     console.log('Result:', JSON.stringify(result, null, 2));
 
     // Disconnect
@@ -45,7 +45,7 @@ async function testResumeExecution() {
 }
 
 // Run the test
-testResumeExecution().then(success => {
+testPauseExecution().then(success => {
   if (success) {
     console.log('✓ Test completed successfully');
     process.exit(0);

@@ -64,7 +64,7 @@ export const debuggerCallStackResourceTemplate: ResourceTemplate = {
     const godot = getGodotConnection();
 
     try {
-      const params = sessionId !== undefined ? { sessionId } : {};
+      const params = sessionId !== undefined ? { session_id: sessionId } : {};
       const result = await godot.sendCommand('debugger_get_call_stack', params);
 
       return {

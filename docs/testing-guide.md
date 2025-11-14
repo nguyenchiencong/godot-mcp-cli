@@ -186,6 +186,30 @@ All examples assume:
   ```
 - **Expected Outcome**: Either the list of error lines plus capture diagnostics (control path, timestamp, etc.) or confirmation that the Errors tab is empty.
 
+### get_stack_trace_panel
+- **Setup**: Pause the debugger by inducing an error or hitting a breakpoint so the Stack Trace tab is populated.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run get_stack_trace_panel
+  ```
+- **Expected Outcome**: The response contains `stack_trace_panel.lines`, a `frames` array with parsed entries, and diagnostics describing which control was captured.
+
+### get_stack_frames_panel
+- **Setup**: Pause execution and (optionally) run `debugger_get_call_stack` so the debugger bridge cache contains frames.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run get_stack_frames_panel --refresh true
+  ```
+- **Expected Outcome**: Response includes a non-empty `frames` array. If empty, diagnostics explain why (e.g., cache not populated).
+
+### clear_debug_output
+- **Setup**: Generate a few lines in the Output panel (e.g., via `print()` or `push_warning()`), then run the command.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run clear_debug_output
+  ```
+- **Expected Outcome**: `cleared: true`, a non-empty `method` (such as `editor_log_clear`), and diagnostics confirming the timestamp/attempted strategies. Subsequent calls to `stream_debug_output` should report a reset frame.
+
 ### get_runtime_scene_structure
 - **Setup**: Run the project (or attach the debugger) so that a runtime session is active.
 - **Command**:

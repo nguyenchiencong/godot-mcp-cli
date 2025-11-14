@@ -7,8 +7,8 @@
  * It requires Godot to be running with the MCP plugin enabled.
  */
 
-import { getGodotConnection } from './dist/utils/godot_connection.js';
-import { debuggerTools } from './dist/tools/debugger_tools.js';
+import { getGodotConnection } from '../dist/utils/godot_connection.js';
+import { debuggerTools } from '../dist/tools/debugger_tools.js';
 
 const colors = {
   reset: '\x1b[0m',
@@ -328,7 +328,7 @@ const args = process.argv.slice(2);
 if (args.includes('--help') || args.includes('-h')) {
   log('Godot MCP Debugger Integration Test Runner', 'bright');
   log('');
-  log('Usage: node test-debugger.js [options]', 'cyan');
+  log('Usage: node debugger.test.js [options]', 'cyan');
   log('');
   log('Options:');
   log('  --help, -h     Show this help message');

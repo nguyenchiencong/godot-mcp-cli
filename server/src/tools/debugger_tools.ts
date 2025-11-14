@@ -11,6 +11,15 @@ interface DebuggerSessionParams {
   session_id?: number;
 }
 
+interface RawStackFrame {
+  index?: number;
+  function?: string;
+  script?: string;
+  file?: string;
+  line?: number;
+  location?: string;
+}
+
 type SimpleToolSuccess<T> = (params: T, result: CommandResult) => string;
 
 interface SimpleDebuggerToolConfig<T> {
@@ -73,7 +82,8 @@ const formatDebuggerState = (state: CommandResult): string => {
   lines.push(`- Active: ${state.debugger_active ? 'Yes' : 'No'}`);
 
   if (Array.isArray(state.active_sessions) && state.active_sessions.length > 0) {
-    lines.push(`- Active Sessions: ${state.active_sessions.join(', ')}`);
+    lines.push(`- Active Sessions (IDs): ${state.active_sessions.join(', ')}`);
+    lines.push(`- Session Count: ${state.active_sessions.length}`);
     lines.push(`- Current Session: ${state.current_session_id ?? 'None'}`);
     lines.push(`- Paused: ${state.paused ? 'Yes' : 'No'}`);
     lines.push(`- Total Breakpoints: ${state.total_breakpoints ?? 0}`);
@@ -83,6 +93,25 @@ const formatDebuggerState = (state: CommandResult): string => {
     }
   } else {
     lines.push('- No active debug sessions');
+  }
+
+  if (state.diagnostics) {
+    const diag = state.diagnostics as Record<string, unknown>;
+    const rawSessionObjects = diag['godot_session_objects'];
+    if (Array.isArray(rawSessionObjects)) {
+      const sessionSummaries = (rawSessionObjects as Array<Record<string, unknown>>)
+        .map((info) => {
+          const id = info['id'] ?? '?';
+          const active = info['active'] ? 'active' : 'inactive';
+          const paused = info['breaked'] ? 'paused' : 'running';
+          return `#${id} (${active}, ${paused})`;
+        });
+      lines.push(`- Godot Sessions (${diag['godot_session_count'] ?? 0}): ${sessionSummaries.length > 0 ? sessionSummaries.join('; ') : 'none detected'}`);
+    }
+    if (Array.isArray(diag['tracked_sessions'])) {
+      const tracked = (diag['tracked_sessions'] as Array<unknown>).map((id) => String(id));
+      lines.push(`- Tracked Session IDs: ${tracked.length > 0 ? tracked.join(', ') : 'none'}`);
+    }
   }
 
   return lines.join('\n');
@@ -200,15 +229,41 @@ export const debuggerTools: MCPTool[] = [
         const params = session_id !== undefined ? { session_id } : {};
         const result = await godot.sendCommand('debugger_get_call_stack', params);
 
-        if (result.request_sent) {
-          return `Call stack request sent for session ${result.session_id}`;
-        }
-
         if (result.error) {
           throw new Error(result.error);
         }
 
-        return 'Call stack request sent';
+        const frames = Array.isArray(result.frames) ? result.frames as RawStackFrame[] : [];
+        if (frames.length === 0) {
+          return 'Call stack is empty.';
+        }
+
+        const lines = frames.map((frame: RawStackFrame, index: number) => {
+          const idx = typeof frame.index === 'number' ? frame.index : index;
+          const fn = typeof frame.function === 'string' && frame.function.length > 0
+            ? frame.function
+            : '(anonymous)';
+          const script = typeof frame.script === 'string' && frame.script.length > 0
+            ? frame.script
+            : (typeof frame.file === 'string' ? frame.file : '');
+          const lineNumber = typeof frame.line === 'number' ? frame.line : -1;
+          let location = script;
+          if (lineNumber >= 0) {
+            location = location.length > 0 ? `${location}:${lineNumber}` : `:${lineNumber}`;
+          }
+          if (location.length === 0 && typeof frame.location === 'string' && frame.location.length > 0) {
+            location = frame.location;
+          }
+          if (location.length === 0) {
+            location = 'location unavailable';
+          }
+          return `#${idx} ${fn} — ${location}`;
+        });
+
+        return [
+          `Captured ${frames.length} frame(s)${result.session_id !== undefined ? ` (session ${result.session_id})` : ''}.`,
+          ...lines
+        ].join('\n');
       } catch (error) {
         throw new Error(`Failed to get call stack: ${(error as Error).message}`);
       }

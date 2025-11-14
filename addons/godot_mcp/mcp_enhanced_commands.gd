@@ -28,6 +28,15 @@ func process_command(client_id: int, command_type: String, params: Dictionary, c
 		"unsubscribe_debug_output":
 			_handle_unsubscribe_debug_output(client_id, command_id)
 			return true
+		"get_stack_trace_panel":
+			_handle_get_stack_trace_panel(client_id, params, command_id)
+			return true
+		"get_stack_frames_panel":
+			_handle_get_stack_frames_panel(client_id, params, command_id)
+			return true
+		"clear_debug_output":
+			_handle_clear_debug_output(client_id, command_id)
+			return true
 	
 	# Command not handled by this processor
 	return false
@@ -42,6 +51,17 @@ func _get_editor_interface():
 func _get_runtime_bridge() -> MCPRuntimeDebuggerBridge:
 	if Engine.has_meta("MCPRuntimeDebuggerBridge"):
 		return Engine.get_meta("MCPRuntimeDebuggerBridge") as MCPRuntimeDebuggerBridge
+	return null
+
+func _get_debugger_bridge() -> MCPDebuggerBridge:
+	if Engine.has_meta("MCPDebuggerBridge"):
+		return Engine.get_meta("MCPDebuggerBridge") as MCPDebuggerBridge
+	if Engine.has_meta("GodotMCPPlugin"):
+		var plugin_instance = Engine.get_meta("GodotMCPPlugin")
+		if plugin_instance and plugin_instance.has_method("get_debugger_bridge"):
+			var bridge = plugin_instance.get_debugger_bridge()
+			if bridge and bridge is MCPDebuggerBridge:
+				return bridge
 	return null
 
 # ---- Scene Structure Commands ----
@@ -342,6 +362,235 @@ func _handle_unsubscribe_debug_output(client_id: int, command_id: String) -> voi
 		"subscribed": false,
 		"message": "Live debug output streaming disabled for this client."
 	}, command_id)
+
+func _handle_get_stack_trace_panel(client_id: int, params: Dictionary, command_id: String) -> void:
+	var publisher := _get_debug_output_publisher()
+	var snapshot: Dictionary = {
+		"text": "",
+		"lines": [],
+		"line_count": 0,
+		"frames": [],
+		"diagnostics": {
+			"error": "debug_output_publisher_unavailable",
+			"timestamp": Time.get_ticks_msec()
+		}
+	}
+
+	if publisher and publisher.has_method("get_stack_trace_snapshot"):
+		var snapshot_session := int(params.get("session_id", -1))
+		snapshot = publisher.get_stack_trace_snapshot(snapshot_session)
+
+	var snapshot_diagnostics := snapshot.get("diagnostics", {})
+	if typeof(snapshot_diagnostics) != TYPE_DICTIONARY:
+		snapshot_diagnostics = {}
+		snapshot["diagnostics"] = snapshot_diagnostics
+
+	var debugger_state := {}
+	var requested_session := int(params.get("session_id", -1))
+	var resolved_session_id := requested_session
+	var debugger_error := ""
+	var debugger_bridge := _get_debugger_bridge()
+
+	if debugger_bridge:
+		debugger_state = debugger_bridge.get_current_state()
+		var active_sessions := debugger_state.get("active_sessions", [])
+		if resolved_session_id < 0 and active_sessions is Array and not active_sessions.is_empty():
+			resolved_session_id = debugger_state.get("current_session_id", -1)
+			if resolved_session_id < 0:
+				resolved_session_id = active_sessions[0]
+		if resolved_session_id >= 0:
+			var frames := []
+			if snapshot.has("frames") and snapshot["frames"] is Array:
+				frames = snapshot["frames"]
+			var lines := []
+			if snapshot.has("lines") and snapshot["lines"] is Array:
+				lines = snapshot["lines"]
+			var needs_stack := frames.is_empty()
+			var needs_lines := lines.is_empty()
+			if needs_stack or needs_lines:
+				if debugger_bridge.has_method("get_cached_stack_info"):
+					var fallback := debugger_bridge.get_cached_stack_info(resolved_session_id)
+					var fallback_frames := fallback.get("frames", [])
+					if fallback_frames is Array and not fallback_frames.is_empty():
+						snapshot["frames"] = fallback_frames
+						snapshot_diagnostics["fallback_source"] = "debugger_bridge"
+						snapshot_diagnostics["fallback_frame_count"] = fallback.get("total_frames", fallback_frames.size())
+						if needs_lines:
+							var formatted_lines := _format_frames_as_lines(fallback_frames)
+							snapshot["lines"] = formatted_lines
+							if snapshot.get("text", "") == "":
+								snapshot["text"] = "\n".join(formatted_lines)
+					elif fallback.has("error"):
+						snapshot_diagnostics["fallback_error"] = fallback["error"]
+	else:
+		debugger_error = "Debugger bridge unavailable"
+
+	var response := {
+		"stack_trace_panel": snapshot,
+		"session_id": resolved_session_id,
+		"debugger_state": debugger_state,
+		"timestamp": Time.get_ticks_msec()
+	}
+
+	if not debugger_error.is_empty():
+		response["call_stack_error"] = debugger_error
+
+	_send_success(client_id, response, command_id)
+
+func _handle_get_stack_frames_panel(client_id: int, params: Dictionary, command_id: String) -> void:
+	var publisher := _get_debug_output_publisher()
+	var snapshot: Dictionary = {
+		"text": "",
+		"lines": [],
+		"line_count": 0,
+		"frames": [],
+		"diagnostics": {
+			"error": "debug_output_publisher_unavailable",
+			"timestamp": Time.get_ticks_msec()
+		}
+	}
+
+	if publisher and publisher.has_method("get_stack_frames_snapshot"):
+		var snapshot_session := int(params.get("session_id", -1))
+		snapshot = publisher.get_stack_frames_snapshot(snapshot_session)
+
+	var snapshot_diagnostics := snapshot.get("diagnostics", {})
+	if typeof(snapshot_diagnostics) != TYPE_DICTIONARY:
+		snapshot_diagnostics = {}
+		snapshot["diagnostics"] = snapshot_diagnostics
+
+	var debugger_state := {}
+	var requested_session := int(params.get("session_id", -1))
+	var resolved_session_id := requested_session
+	var debugger_error := ""
+	var debugger_bridge := _get_debugger_bridge()
+
+	var refresh_requested := bool(params.get("refresh", false))
+	if debugger_bridge:
+		debugger_state = debugger_bridge.get_current_state()
+		var active_sessions := debugger_state.get("active_sessions", [])
+		if resolved_session_id < 0 and active_sessions is Array and not active_sessions.is_empty():
+			resolved_session_id = debugger_state.get("current_session_id", -1)
+			if resolved_session_id < 0:
+				resolved_session_id = active_sessions[0]
+		if resolved_session_id >= 0:
+			var frames := []
+			if snapshot.has("frames") and snapshot["frames"] is Array:
+				frames = snapshot["frames"]
+			var needs_stack := frames.is_empty()
+			var needs_enrichment := _frames_need_enrichment(frames)
+			var existing_lines := []
+			if snapshot.has("lines") and snapshot["lines"] is Array:
+				existing_lines = snapshot["lines"]
+			var needs_lines := existing_lines.is_empty()
+			var require_debugger_frames := refresh_requested or needs_stack or needs_lines or needs_enrichment
+			if require_debugger_frames and debugger_bridge.has_method("get_cached_stack_info"):
+				var debugger_snapshot := await _fetch_debugger_stack_frames(debugger_bridge, resolved_session_id, refresh_requested)
+				var fallback_frames := debugger_snapshot.get("frames", [])
+				if fallback_frames is Array and not fallback_frames.is_empty():
+					snapshot["frames"] = fallback_frames
+					snapshot_diagnostics["fallback_source"] = "debugger_bridge"
+					snapshot_diagnostics["fallback_frame_count"] = debugger_snapshot.get("total_frames", fallback_frames.size())
+					if needs_lines or snapshot.get("lines", []).is_empty():
+						var formatted_lines := _format_stack_frames_panel_lines(fallback_frames)
+						if not formatted_lines.is_empty():
+							snapshot["lines"] = formatted_lines
+							snapshot["line_count"] = formatted_lines.size()
+							if snapshot.get("text", "") == "":
+								snapshot["text"] = "\n".join(formatted_lines)
+					needs_stack = false
+					needs_enrichment = false
+					needs_lines = false
+				elif debugger_snapshot.has("error"):
+					snapshot_diagnostics["fallback_error"] = debugger_snapshot["error"]
+			if needs_lines and snapshot.get("text", "") != "":
+				var fallback_lines := String(snapshot["text"]).split("\n", false)
+				if not fallback_lines.is_empty():
+					snapshot["lines"] = fallback_lines
+					snapshot["line_count"] = fallback_lines.size()
+			if needs_stack and not snapshot.has("frames"):
+				snapshot["frames"] = []
+	else:
+		debugger_error = "Debugger bridge unavailable"
+
+	var snapshot_frames := []
+	if snapshot.has("frames") and snapshot["frames"] is Array:
+		snapshot_frames = snapshot["frames"]
+	if snapshot_frames is Array and not snapshot_frames.is_empty():
+		var formatted_frame_lines := _format_stack_frames_panel_lines(snapshot_frames)
+		if not formatted_frame_lines.is_empty():
+			snapshot["lines"] = formatted_frame_lines
+			snapshot["line_count"] = formatted_frame_lines.size()
+			snapshot["text"] = "\n".join(formatted_frame_lines)
+
+	var response := {
+		"stack_frames_panel": snapshot,
+		"session_id": resolved_session_id,
+		"debugger_state": debugger_state,
+		"timestamp": Time.get_ticks_msec()
+	}
+
+	if not debugger_error.is_empty():
+		response["stack_frames_error"] = debugger_error
+
+	_send_success(client_id, response, command_id)
+
+func _fetch_debugger_stack_frames(debugger_bridge: MCPDebuggerBridge, session_id: int, refresh_requested: bool) -> Dictionary:
+	if debugger_bridge == null or session_id < 0:
+		return {}
+	var result := {}
+	if refresh_requested:
+		result = await debugger_bridge.get_call_stack(session_id)
+		if typeof(result) == TYPE_DICTIONARY and result.get("frames", []).size() > 0:
+			return result
+
+	result = debugger_bridge.get_cached_stack_info(session_id)
+	var frames := result.get("frames", [])
+	if frames is Array and not frames.is_empty():
+		return result
+
+	var refreshed_result = await debugger_bridge.get_call_stack(session_id)
+	if typeof(refreshed_result) == TYPE_DICTIONARY and refreshed_result.get("frames", []).is_empty() == false:
+		return refreshed_result
+
+	var log_frames := _build_frames_from_debug_output()
+	if not log_frames.is_empty():
+		return log_frames
+
+	return result
+
+func _frames_need_enrichment(frames: Array) -> bool:
+	if frames.is_empty():
+		return false
+	for frame in frames:
+		if typeof(frame) != TYPE_DICTIONARY:
+			continue
+		var script := ""
+		if frame.has("script") and frame["script"] is String:
+			script = frame["script"]
+		elif frame.has("file") and frame["file"] is String:
+			script = frame["file"]
+		var line := -1
+		if frame.has("line") and frame["line"] is int:
+			line = frame["line"]
+		if script == "" or line < 0:
+			return true
+	return false
+
+func _handle_clear_debug_output(client_id: int, command_id: String) -> void:
+	var publisher := _get_debug_output_publisher()
+	if publisher == null or not publisher.has_method("clear_log_output"):
+		_send_error(client_id, "Cannot clear Output panel because the debug output publisher is unavailable.", command_id)
+		return
+
+	var result := publisher.clear_log_output()
+	if not result.has("message"):
+		if result.get("cleared", false):
+			result["message"] = "Debug Output panel cleared."
+		else:
+			result["message"] = "Debug Output panel could not be cleared automatically."
+
+	_send_success(client_id, result, command_id)
 
 func _get_debug_output_publisher() -> MCPDebugOutputPublisher:
 	if Engine.has_meta("MCPDebugOutputPublisher"):
@@ -664,3 +913,153 @@ func update_node_transform(node_path: String, position, rotation, scale) -> Dict
 			"scale": scale != null
 		}
 	}
+
+func _format_frames_as_lines(frames: Array) -> Array:
+	var lines: Array = []
+	for i in range(frames.size()):
+		var frame = frames[i]
+		if typeof(frame) != TYPE_DICTIONARY:
+			continue
+		var index: int = i
+		if frame.has("index") and frame["index"] is int:
+			index = frame["index"]
+		var script: String = ""
+		if frame.has("script") and frame["script"] is String:
+			script = frame["script"]
+		elif frame.has("file") and frame["file"] is String:
+			script = frame["file"]
+		var line_num: int = -1
+		if frame.has("line") and frame["line"] is int:
+			line_num = frame["line"]
+		var function_name: String = ""
+		if frame.has("function") and frame["function"] is String:
+			function_name = frame["function"]
+		var location := ""
+		if script is String and not script.is_empty():
+			location = script
+		if line_num is int and line_num >= 0:
+			if location.is_empty():
+				location = ":%d" % line_num
+			else:
+				location += ":%d" % line_num
+		if location.is_empty():
+			location = String(frame.get("location", "unknown location"))
+		var fn_display := function_name if function_name is String and not function_name.is_empty() else "(anonymous)"
+		lines.append("#%d %s — %s" % [index, fn_display, location])
+	return lines
+
+func _build_frames_from_debug_output() -> Dictionary:
+	var frames := _parse_frames_from_debug_output()
+	if frames.is_empty():
+		return {}
+	return {
+		"frames": frames,
+		"total_frames": frames.size(),
+		"current_frame": 0,
+		"source": "debug_output"
+	}
+
+func _parse_frames_from_debug_output() -> Array:
+	var publisher := _get_debug_output_publisher()
+	if publisher == null or not publisher.has_method("get_full_log_text"):
+		return []
+	var text := publisher.get_full_log_text()
+	if text.is_empty():
+		return []
+	var lines := text.split("\n", false)
+	var frame_lines: Array = []
+	var collecting := false
+	for i in range(lines.size() - 1, -1, -1):
+		var line := String(lines[i]).strip_edges()
+		if line.begins_with("Frame "):
+			collecting = true
+			frame_lines.push_front(line)
+		elif collecting:
+			break
+	if frame_lines.is_empty():
+		return []
+	var frames := []
+	for line in frame_lines:
+		var frame_dict := _parse_print_stack_line(line)
+		if not frame_dict.is_empty():
+			frames.append(frame_dict)
+	return frames
+
+func _parse_print_stack_line(line: String) -> Dictionary:
+	var trimmed := line.strip_edges()
+	if not trimmed.begins_with("Frame "):
+		return {}
+	var dash_index := trimmed.find(" - ")
+	if dash_index == -1:
+		return {}
+	var index_text := trimmed.substr(6, dash_index - 6).strip_edges()
+	var index_value := 0
+	if index_text.is_valid_int():
+		index_value = int(index_text)
+	var rest := trimmed.substr(dash_index + 3).strip_edges()
+	var func_name := ""
+	var location := rest
+	var at_index := rest.find("@")
+	if at_index != -1:
+		location = rest.substr(0, at_index).strip_edges()
+		func_name = rest.substr(at_index + 1).strip_edges()
+		if func_name.ends_with("()"):
+			func_name = func_name.substr(0, func_name.length() - 2)
+	var script_path := ""
+	var line_number := -1
+	var colon_index := location.rfind(":")
+	if colon_index != -1:
+		var line_text := location.substr(colon_index + 1).strip_edges()
+		if line_text.is_valid_int():
+			line_number = int(line_text)
+		script_path = location.substr(0, colon_index).strip_edges()
+	else:
+		script_path = location
+	return {
+		"index": index_value,
+		"function": func_name,
+		"script": script_path,
+		"file": script_path,
+		"line": line_number,
+		"location": location
+	}
+
+func _format_stack_frames_panel_lines(frames: Array) -> Array:
+	var lines: Array = []
+	for i in range(frames.size()):
+		var frame = frames[i]
+		if typeof(frame) != TYPE_DICTIONARY:
+			continue
+		var index_value := i
+		if frame.has("index"):
+			var raw_index = frame["index"]
+			if typeof(raw_index) == TYPE_INT:
+				index_value = raw_index
+			elif typeof(raw_index) == TYPE_STRING:
+				var index_text := String(raw_index).strip_edges()
+				if index_text.is_valid_int():
+					index_value = int(index_text)
+		var script_path := ""
+		if frame.has("script") and typeof(frame["script"]) == TYPE_STRING:
+			script_path = frame["script"]
+		elif frame.has("file") and typeof(frame["file"]) == TYPE_STRING:
+			script_path = frame["file"]
+		var line_number := -1
+		if frame.has("line") and typeof(frame["line"]) == TYPE_INT:
+			line_number = frame["line"]
+		var location := ""
+		if not script_path.is_empty():
+			location = script_path
+			if line_number >= 0:
+				location += ":%d" % line_number
+		else:
+			location = String(frame.get("location", ""))
+		if location.is_empty():
+			location = "<unknown>"
+		var function_name := ""
+		if frame.has("function") and typeof(frame["function"]) == TYPE_STRING:
+			function_name = frame["function"]
+		if function_name.is_empty():
+			function_name = "(anonymous)"
+		lines.append("%d - %s - at function: %s" % [index_value, location, function_name])
+	return lines

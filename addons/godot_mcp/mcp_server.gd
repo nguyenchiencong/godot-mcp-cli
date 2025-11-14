@@ -10,6 +10,7 @@ var debug_output_publisher = null  # Live debug output broadcaster
 var _runtime_bridge_warning_logged := false
 var _debugger_bridge_warning_logged := false
 const SCENE_CAPTURE_NAMES := ["scene", "limboai", "mcp_eval"]
+const STACK_CAPTURE_NAMES := ["stack", "call_stack", "callstack"]
 
 func _enter_tree():
 	# Store plugin instance for EditorInterface access
@@ -213,7 +214,7 @@ func _update_debugger_captures(enable: bool) -> void:
 	if not engine_debugger.has_method("set_capture"):
 		return
 	var has_query := engine_debugger.has_method("has_capture")
-	for name in SCENE_CAPTURE_NAMES:
+	for name in SCENE_CAPTURE_NAMES + STACK_CAPTURE_NAMES:
 		if enable:
 			if not has_query or not engine_debugger.has_capture(name):
 				engine_debugger.set_capture(name, true)

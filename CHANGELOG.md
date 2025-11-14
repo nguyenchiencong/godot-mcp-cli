@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.  
 
+## 2025-11-13
+
+### Added
+- `get_stack_trace_panel` tooling (Godot command, MCP tool, and docs) to capture the Stack Trace panel plus parsed frames and debugger context whenever execution pauses.
+- `clear_debug_output` tool/command pair that wipes the editor Output panel, resets streaming subscribers, and reports diagnostics about how the clear was performed.
+- `get_stack_frames_panel` tooling and a dedicated JS test to capture structured stack frames from the debugger bridge cache.
+- Reworked `execute_editor_script` flow to capture parser/runtime errors, log tails, and timeouts for more actionable diagnostics.
+- Documentation updates (README, command/tool guides, testing guide) covering the new stack trace capture and output clearing workflows.
+
 ## 2025-11-11
 
 ### Added

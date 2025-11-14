@@ -99,15 +99,29 @@ func _handle_command(client_id: int, command: Dictionary) -> void:
 		# Try to find enhanced commands processor first
 		for processor in _command_processors:
 			if processor.get_script() and processor.get_script().resource_path.ends_with("mcp_enhanced_commands.gd"):
-				if processor.process_command(client_id, command_type, params, command_id):
-					print("Command %s handled by Enhanced Commands processor" % command_type)
-					return
+				var handled = processor.process_command(client_id, command_type, params, command_id)
+				if handled is bool:
+					if handled:
+						print("Command %s handled by Enhanced Commands processor" % command_type)
+						return
+				elif handled != null:
+					var awaited_state = await handled
+					if awaited_state:
+						print("Command %s handled by Enhanced Commands processor" % command_type)
+						return
 	
 	# Try each processor until one handles the command
 	for processor in _command_processors:
-		if processor.process_command(client_id, command_type, params, command_id):
-			print("Command %s handled by %s" % [command_type, processor.get_class()])
-			return
+		var handled = processor.process_command(client_id, command_type, params, command_id)
+		if handled is bool:
+			if handled:
+				print("Command %s handled by %s" % [command_type, processor.get_class()])
+				return
+		elif handled != null:
+			var awaited_state = await handled
+			if awaited_state:
+				print("Command %s handled by %s" % [command_type, processor.get_class()])
+				return
 	
 	# If no processor handled the command, send an error
 	_send_error(client_id, "Unknown command: %s" % command_type, command_id)

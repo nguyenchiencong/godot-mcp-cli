@@ -109,7 +109,7 @@ func process_command(client_id: int, command_type: String, params: Dictionary, c
             _call_bridge_no_args(client_id, command_id, 'step_into', 'Failed to step into')
             return true
         'debugger_get_call_stack':
-            _get_call_stack(client_id, params, command_id)
+            await _get_call_stack(client_id, params, command_id)
             return true
         'debugger_get_current_state':
             _get_current_state(client_id, params, command_id)
@@ -129,7 +129,7 @@ func _get_breakpoints(client_id: int, params: Dictionary, command_id: String) ->
     var result = _debugger_bridge.get_breakpoints()
     _send_success(client_id, result, command_id)
 
-func _get_call_stack(client_id: int, params: Dictionary, command_id: String) -> void:
+func _get_call_stack(client_id: int, params: Dictionary, command_id: String):
     if not _ensure_bridge(client_id, command_id):
         return
 
@@ -143,7 +143,12 @@ func _get_call_stack(client_id: int, params: Dictionary, command_id: String) -> 
             return
         session_id = active_sessions[0]
 
-    var result = _debugger_bridge.get_call_stack(session_id)
+    var result = await _debugger_bridge.get_call_stack(session_id)
+    if typeof(result) == TYPE_DICTIONARY and result.has("error"):
+        var message := String(result.get("message", result.get("error", "unknown_call_stack_error")))
+        _send_error(client_id, "Failed to capture call stack: %s" % message, command_id)
+        return
+
     _send_success(client_id, result, command_id)
 
 func _get_current_state(client_id: int, params: Dictionary, command_id: String) -> void:

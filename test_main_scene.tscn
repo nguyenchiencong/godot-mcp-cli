@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3 uid="uid://bqxnyxqvxj8vr"]
 
-[ext_resource type="Script" path="res://test_debugger.gd" id="1_0k8xr"]
+[ext_resource type="Script" uid="uid://bc76nus88fknp" path="res://test_debugger.gd" id="1_0k8xr"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_1x8xr"]
 size = Vector2(80, 80)
@@ -68,6 +68,6 @@ shape = SubResource("RectangleShape2D_1x8xr")
 
 [node name="Child1" type="Node" parent="TestNode"]
 
-[node name="Child2" type="Node" parent="TestNode"]
-
 [node name="Grandchild" type="Node" parent="TestNode/Child1"]
+
+[node name="Child2" type="Node" parent="TestNode"]

@@ -8,7 +8,6 @@ var _test_string: String = "test_value"
 
 func _ready():
 	print("[Debugger Test] Test node ready")
-
 	# Test code that we can set breakpoints on
 	_test_function_call()
 

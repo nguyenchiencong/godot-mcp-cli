@@ -129,19 +129,30 @@ func _get_breakpoints(client_id: int, params: Dictionary, command_id: String) ->
     var result = _debugger_bridge.get_breakpoints()
     _send_success(client_id, result, command_id)
 
+func _parse_session_identifier(raw_value) -> Variant:
+    var session_id = raw_value
+    var value_type := typeof(raw_value)
+    match value_type:
+        TYPE_INT:
+            return raw_value
+        TYPE_FLOAT:
+            return int(raw_value)
+        TYPE_STRING:
+            var session_str: String = raw_value
+            if session_str.is_valid_int():
+                return int(session_str)
+            return session_str.strip_edges()
+        _:
+            return raw_value
+    return session_id
+
 func _get_call_stack(client_id: int, params: Dictionary, command_id: String):
     if not _ensure_bridge(client_id, command_id):
         return
 
-    var session_id = params.get('session_id', -1)
-
-    if session_id < 0:
-        var current_state = _debugger_bridge.get_current_state()
-        var active_sessions = current_state.get('active_sessions', [])
-        if active_sessions.is_empty():
-            _send_error(client_id, 'No active debugger session found', command_id)
-            return
-        session_id = active_sessions[0]
+    var session_id = null
+    if params.has('session_id'):
+        session_id = _parse_session_identifier(params['session_id'])
 
     var result = await _debugger_bridge.get_call_stack(session_id)
     if typeof(result) == TYPE_DICTIONARY and result.has("error"):

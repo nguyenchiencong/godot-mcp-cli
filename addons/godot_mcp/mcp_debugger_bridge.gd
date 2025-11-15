@@ -22,6 +22,8 @@ var _session_stack_cache: Dictionary = {}
 const MAX_STACK_FRAMES: int = 50
 const EVENT_THROTTLE_MS: int = 100
 var _last_event_time: int = 0
+const STACK_CAPTURE_NAMES := ["stack", "call_stack", "callstack", "stack_dump"]
+const DEBUGGER_CAPTURE_NAMES := ["mcp_debugger", "breakpoint", "debugger"]
 
 func _init():
 	_active_sessions.clear()
@@ -35,21 +37,43 @@ func set_websocket_server(server):
 func set_client_id(client_id: int):
 	_current_client_id = client_id
 
+func _normalize_capture_name(value: String) -> String:
+	return value.to_lower()
+
+func _is_stack_capture_name(name: String) -> bool:
+	return name in STACK_CAPTURE_NAMES
+
+func _is_debugger_capture_name(name: String) -> bool:
+	return name in DEBUGGER_CAPTURE_NAMES
+
 func _has_capture(capture: String) -> bool:
 	# We handle multiple captures to integrate with Godot's debugger system
-	return capture in ["mcp_debugger", "breakpoint", "debugger"]
+	var capture_lc = _normalize_capture_name(capture)
+	return _is_debugger_capture_name(capture_lc) or _is_stack_capture_name(capture_lc)
+
+func _build_stack_capture_payload(data: Array) -> Dictionary:
+	if not data.is_empty() and typeof(data[0]) == TYPE_DICTIONARY:
+		return data[0]
+	return {"stack": data}
 
 func _capture(message: String, data: Array, session_id: int) -> bool:
-	_trace("Debugger capture received: %s for session %s" % [message, session_id])
+	var normalized_session_id = _normalize_session_id(session_id)
+	_trace("Debugger capture received: %s for session %s" % [message, normalized_session_id])
+
+	var message_lc = _normalize_capture_name(message)
+	if _is_stack_capture_name(message_lc):
+		var payload := _build_stack_capture_payload(data)
+		_handle_stack_dump(normalized_session_id, payload)
+		return true
 
 	# Handle different Godot debugger messages
-	match message:
+	match message_lc:
 		"breakpoint":
-			_handle_native_breakpoint(session_id, data)
+			_handle_native_breakpoint(normalized_session_id, data)
 		"debugger":
-			_handle_debugger_message(session_id, data)
+			_handle_debugger_message(normalized_session_id, data)
 		"mcp_debugger":
-			_handle_mcp_debugger_message(session_id, data)
+			_handle_mcp_debugger_message(normalized_session_id, data)
 		_:
 			return false
 
@@ -121,9 +145,10 @@ func _handle_mcp_debugger_message(session_id: int, data: Array) -> void:
 			_trace("Unknown MCP debugger event type: %s" % event_type)
 
 func _setup_session(session_id: int) -> void:
+	session_id = _normalize_session_id(session_id)
 	_trace("Setting up debugger session %s" % session_id)
 
-	var session := get_session(session_id)
+	var session = _get_session_instance(session_id)
 	if session:
 		# Diagnostic: Log available methods and properties
 		_diagnose_session_capabilities(session)
@@ -137,17 +162,142 @@ func _setup_session(session_id: int) -> void:
 			# Restore any existing breakpoints for this session
 			_setup_session_breakpoints(session_id)
 
-func _ensure_session_state(session_id: int, mark_active: bool = false) -> void:
-	if not _active_sessions.has(session_id):
-		_active_sessions[session_id] = {
+func _normalize_session_id(value) -> Variant:
+	var value_type := typeof(value)
+	if value_type == TYPE_INT:
+		return value
+	if value_type == TYPE_FLOAT:
+		return int(value)
+	if value_type == TYPE_STRING:
+		var text: String = value
+		if text.is_valid_int():
+			return int(text)
+	return value
+
+# Session tracking helpers
+func _is_empty_session_request(value) -> bool:
+	if value == null:
+		return true
+	var value_type := typeof(value)
+	match value_type:
+		TYPE_INT:
+			return value < 0
+		TYPE_FLOAT:
+			return int(value) < 0
+		TYPE_STRING:
+			return String(value).strip_edges().is_empty()
+		_:
+			return false
+
+func _collect_session_candidate_ids(requested_session_id) -> Array:
+	var candidates: Array = []
+	var use_active_sessions := _is_empty_session_request(requested_session_id)
+
+	if not use_active_sessions:
+		candidates.append(requested_session_id)
+
+	if use_active_sessions:
+		var active_ids = _get_active_session_ids()
+		for session_id in active_ids:
+			if session_id not in candidates:
+				candidates.append(session_id)
+
+	return candidates
+
+func _find_tracked_session_key(session_id) -> Variant:
+	if _active_sessions.has(session_id):
+		return session_id
+	var normalized_id = _normalize_session_id(session_id)
+	if _active_sessions.has(normalized_id):
+		return normalized_id
+	for key in _active_sessions.keys():
+		if _normalize_session_id(key) == normalized_id:
+			return key
+	return null
+
+func _resolve_session_index(session_identifier) -> int:
+	var normalized = _normalize_session_id(session_identifier)
+
+	var sessions := get_sessions()
+	for i in range(sessions.size()):
+		var session = sessions[i]
+		if session == null:
+			continue
+
+		var reported_id = session.get_session_id() if session.has_method("get_session_id") else i
+		var reported_normalized = _normalize_session_id(reported_id)
+		if reported_normalized == normalized:
+			return i
+		if typeof(normalized) == TYPE_STRING:
+			var reported_text := str(reported_normalized)
+			if reported_text == normalized:
+				return i
+
+	if typeof(normalized) == TYPE_INT and normalized >= 0 and normalized < sessions.size():
+		return normalized
+
+	return -1
+
+func _get_session_instance(session_identifier):
+	var session_index := _resolve_session_index(session_identifier)
+	if session_index < 0:
+		return null
+	return get_session(session_index)
+
+func _move_dict_key(target: Dictionary, old_key, new_key) -> void:
+	if old_key == null or new_key == null or old_key == new_key:
+		return
+	if not target.has(old_key):
+		return
+	if target.has(new_key):
+		target.erase(old_key)
+		return
+	target[new_key] = target[old_key]
+	target.erase(old_key)
+
+func _rekey_session_data(old_key, new_key) -> void:
+	if old_key == null or new_key == null or old_key == new_key:
+		return
+	_move_dict_key(_active_sessions, old_key, new_key)
+	_move_dict_key(_session_breakpoints, old_key, new_key)
+	_move_dict_key(_session_stack_cache, old_key, new_key)
+
+func _sync_tracked_session(session_id) -> bool:
+	var normalized_id = _normalize_session_id(session_id)
+	if _active_sessions.has(normalized_id):
+		return true
+
+	var existing_key = _find_tracked_session_key(normalized_id)
+	if existing_key != null:
+		_rekey_session_data(existing_key, normalized_id)
+		return true
+
+	# Refresh session tracking in case the debugger state changed
+	_get_active_session_ids()
+	existing_key = _find_tracked_session_key(normalized_id)
+	if existing_key != null:
+		_rekey_session_data(existing_key, normalized_id)
+		return true
+
+	return false
+
+func _ensure_session_state(session_id, mark_active: bool = false) -> void:
+	var normalized_id = _normalize_session_id(session_id)
+	var tracked_key = _find_tracked_session_key(normalized_id)
+
+	if tracked_key == null:
+		_active_sessions[normalized_id] = {
 			"active": mark_active,
 			"paused": false,
 			"current_script": "",
 			"current_line": -1,
 			"breakpoints": []
 		}
-	elif mark_active:
-		_active_sessions[session_id]["active"] = true
+	elif tracked_key != normalized_id:
+		_rekey_session_data(tracked_key, normalized_id)
+
+	if mark_active and _active_sessions.has(normalized_id):
+		_active_sessions[normalized_id]["active"] = true
 
 func _track_local_breakpoint(script_path: String, line: int) -> void:
 	if not _breakpoints.has(script_path):
@@ -166,13 +316,14 @@ func _untrack_local_breakpoint(script_path: String, line: int) -> void:
 	if script_breakpoints.is_empty():
 		_breakpoints.erase(script_path)
 
-func _ensure_session_breakpoint_storage(session_id: int) -> Dictionary:
-	if not _session_breakpoints.has(session_id):
-		_session_breakpoints[session_id] = {}
+func _ensure_session_breakpoint_storage(session_id) -> Dictionary:
+	var normalized_id = _normalize_session_id(session_id)
+	if not _session_breakpoints.has(normalized_id):
+		_session_breakpoints[normalized_id] = {}
 
-	return _session_breakpoints[session_id]
+	return _session_breakpoints[normalized_id]
 
-func _session_breakpoint_lines(session_id: int, script_path: String) -> Array:
+func _session_breakpoint_lines(session_id, script_path: String) -> Array:
 	var storage = _ensure_session_breakpoint_storage(session_id)
 	if not storage.has(script_path):
 		storage[script_path] = []
@@ -184,8 +335,8 @@ func _get_primary_session_info() -> Dictionary:
 	if active_sessions.is_empty():
 		return {}
 
-	var session_id: int = active_sessions[0]
-	var session := get_session(session_id)
+	var session_id = active_sessions[0]
+	var session = _get_session_instance(session_id)
 	if not session or not session.is_active():
 		return {"error": "Debugger session not active"}
 
@@ -207,7 +358,7 @@ func _with_primary_session(error_message: String, action: Callable) -> Dictionar
 func _active_session_objects() -> Array:
 	var sessions: Array = []
 	for session_id in _get_active_session_ids():
-		var session := get_session(session_id)
+		var session = _get_session_instance(session_id)
 		if session and session.is_active():
 			sessions.append({
 				"id": session_id,
@@ -349,26 +500,58 @@ func step_into() -> Dictionary:
 
 
 # Call stack and inspection
-func get_call_stack(session_id: int, timeout_ms: int = 750) -> Dictionary:
-	if not _active_sessions.has(session_id):
-		return {"error": "session_not_found"}
+func get_call_stack(session_id = null, timeout_ms: int = 750) -> Dictionary:
+	var candidate_ids := _collect_session_candidate_ids(session_id)
+	if candidate_ids.is_empty():
+		return {
+			"error": "session_not_found",
+			"message": "No active debugger session available"
+		}
 
-	var session := get_session(session_id)
-	if session == null or not session.is_active():
-		return {"error": "session_not_active"}
+	var last_error: Dictionary = {}
+	for candidate in candidate_ids:
+		var normalized_id = _normalize_session_id(candidate)
+		if not _sync_tracked_session(normalized_id):
+			if _resolve_session_index(normalized_id) < 0:
+				last_error = {
+					"error": "session_not_found",
+					"session_id": normalized_id
+				}
+				continue
+			_ensure_session_state(normalized_id, true)
 
-	var request_timestamp := Time.get_ticks_msec()
-	session.send_message("get_stack_dump", [])
+		var session = _get_session_instance(normalized_id)
+		if session == null or not session.is_active():
+			last_error = {
+				"error": "session_not_active",
+				"session_id": normalized_id
+			}
+			continue
 
-	var stack_info := await _wait_for_stack_dump(session_id, request_timestamp, timeout_ms)
-	return stack_info
+		var request_timestamp := Time.get_ticks_msec()
+		session.send_message("get_stack_dump", [])
 
-func get_cached_stack_info(session_id: int) -> Dictionary:
-	if session_id < 0:
+		var stack_info := await _wait_for_stack_dump(normalized_id, request_timestamp, timeout_ms)
+		if stack_info.has("error"):
+			last_error = stack_info
+			continue
+
+		return stack_info
+
+	if last_error.is_empty():
+		return {
+			"error": "session_not_found",
+			"message": "No debugger session responded"
+		}
+	return last_error
+
+func get_cached_stack_info(session_id) -> Dictionary:
+	var normalized_id = _normalize_session_id(session_id)
+	if typeof(normalized_id) == TYPE_INT and normalized_id < 0:
 		return {"error": "invalid_session"}
-	if _session_stack_cache.has(session_id):
-		return _session_stack_cache[session_id].duplicate(true)
-	var stack_info := _update_session_stack_cache(session_id)
+	if _session_stack_cache.has(normalized_id):
+		return _session_stack_cache[normalized_id].duplicate(true)
+	var stack_info := _update_session_stack_cache(normalized_id)
 	if stack_info.has("error"):
 		return stack_info
 	return stack_info.duplicate(true)
@@ -400,6 +583,7 @@ func get_current_state() -> Dictionary:
 	}
 
 # Private methods
+# All handlers below assume session_id has already been normalized.
 func _handle_breakpoint_hit(session_id: int, event_data: Dictionary) -> void:
 	var script_path = event_data.get("script_path", "")
 	var line = event_data.get("line", -1)
@@ -538,7 +722,8 @@ func _sanitize_stack_info(stack_info: Dictionary) -> Dictionary:
 
 	return stack_info
 
-func _update_session_stack_cache(session_id: int, stack_info = null) -> Dictionary:
+func _update_session_stack_cache(session_id, stack_info = null) -> Dictionary:
+	session_id = _normalize_session_id(session_id)
 	var info: Dictionary
 	if typeof(stack_info) == TYPE_DICTIONARY:
 		info = stack_info.duplicate(true)
@@ -554,7 +739,8 @@ func _update_session_stack_cache(session_id: int, stack_info = null) -> Dictiona
 	_session_stack_cache[session_id] = sanitized.duplicate(true)
 	return sanitized
 
-func _wait_for_stack_dump(session_id: int, request_timestamp: int, timeout_ms: int) -> Dictionary:
+func _wait_for_stack_dump(session_id, request_timestamp: int, timeout_ms: int) -> Dictionary:
+	session_id = _normalize_session_id(session_id)
 	var cached := _duplicate_stack_cache(session_id)
 	if _stack_info_ready(cached, request_timestamp):
 		return cached
@@ -576,7 +762,23 @@ func _wait_for_stack_dump(session_id: int, request_timestamp: int, timeout_ms: i
 			return cached
 
 	if not cached.is_empty():
+		if cached.get("frames", []).is_empty():
+			var fallback := _build_frames_from_debug_output()
+			if not fallback.is_empty():
+				fallback["timestamp"] = Time.get_ticks_msec()
+				fallback["session_id"] = session_id
+				fallback["warning"] = "stack_dump_timeout"
+				_session_stack_cache[session_id] = fallback.duplicate(true)
+				return fallback
 		return cached
+
+	var fallback_result := _build_frames_from_debug_output()
+	if not fallback_result.is_empty():
+		fallback_result["timestamp"] = Time.get_ticks_msec()
+		fallback_result["session_id"] = session_id
+		fallback_result["warning"] = "stack_dump_timeout"
+		_session_stack_cache[session_id] = fallback_result.duplicate(true)
+		return fallback_result
 
 	return {
 		"error": "stack_dump_timeout",
@@ -584,7 +786,8 @@ func _wait_for_stack_dump(session_id: int, request_timestamp: int, timeout_ms: i
 		"message": "Timed out waiting for debugger stack dump."
 	}
 
-func _duplicate_stack_cache(session_id: int) -> Dictionary:
+func _duplicate_stack_cache(session_id) -> Dictionary:
+	session_id = _normalize_session_id(session_id)
 	if not _session_stack_cache.has(session_id):
 		return {}
 	var cached = _session_stack_cache[session_id]
@@ -872,9 +1075,11 @@ func _get_active_session_ids() -> Array:
 		if not session:
 			continue
 
-		var session_id := i
+		var session_id_value := i
 		if session.has_method("get_session_id"):
-			session_id = session.get_session_id()
+			session_id_value = session.get_session_id()
+
+		var session_id = _normalize_session_id(session_id_value)
 
 		var session_active: bool = session.has_method("is_active") and session.is_active()
 		var session_breaked: bool = session.has_method("is_breaked") and session.is_breaked()
@@ -887,8 +1092,9 @@ func _get_active_session_ids() -> Array:
 				result.append(session_id)
 
 	# Fallback to tracked sessions when Godot doesn't report them via get_sessions().
-	for session_id in _active_sessions.keys():
-		var state: Dictionary = _active_sessions[session_id]
+	for session_key in _active_sessions.keys():
+		var session_id = _normalize_session_id(session_key)
+		var state: Dictionary = _active_sessions[session_key]
 		if state.get("active", false) or state.get("paused", false):
 			if session_id not in result:
 				result.append(session_id)
@@ -896,12 +1102,14 @@ func _get_active_session_ids() -> Array:
 	return result
 
 func _on_session_started(session_id: int) -> void:
+	session_id = _normalize_session_id(session_id)
 	_ensure_session_state(session_id, true)
 	_trace("Debugger session %s started" % session_id)
 	# Restore any existing breakpoints for this session
 	_setup_session_breakpoints(session_id)
 
 func _on_session_stopped(session_id: int) -> void:
+	session_id = _normalize_session_id(session_id)
 	_ensure_session_state(session_id)
 	_active_sessions[session_id]["active"] = false
 	_active_sessions[session_id]["paused"] = false
@@ -909,6 +1117,7 @@ func _on_session_stopped(session_id: int) -> void:
 	_trace("Debugger session %s stopped" % session_id)
 
 func _on_session_breaked(can_debug: bool, session_id: int) -> void:
+	session_id = _normalize_session_id(session_id)
 	_ensure_session_state(session_id)
 	_active_sessions[session_id]["paused"] = can_debug
 	_trace("Debugger session %s breaked, can_debug=%s" % [session_id, can_debug])
@@ -1078,8 +1287,9 @@ func _remove_native_breakpoint(session: EditorDebuggerSession, script_path: Stri
 	_trace("All breakpoint removal methods attempted for %s:%d" % [script_path, line])
 	return true  # Return true to indicate we attempted removal
 
-func _get_session_stack_info(session_id: int) -> Dictionary:
-	var session := get_session(session_id)
+func _get_session_stack_info(session_id) -> Dictionary:
+	session_id = _normalize_session_id(session_id)
+	var session = _get_session_instance(session_id)
 	if not session or not session.is_active():
 		return {"frames": [], "total_frames": 0}
 
@@ -1110,12 +1320,13 @@ func _get_session_stack_info(session_id: int) -> Dictionary:
 		"current_frame": 0
 	}
 
-func _setup_session_breakpoints(session_id: int) -> void:
+func _setup_session_breakpoints(session_id) -> void:
+	session_id = _normalize_session_id(session_id)
 	# When a new session starts, set up all existing breakpoints for it
 	if not _session_breakpoints.has(session_id):
 		return
 
-	var session := get_session(session_id)
+	var session = _get_session_instance(session_id)
 	if not session or not session.is_active():
 		return
 
@@ -1161,3 +1372,84 @@ func _diagnose_session_capabilities(session: EditorDebuggerSession) -> void:
 func _trace(text: String) -> void:
 	if OS.is_stdout_verbose():
 		print("[MCPDebugger] %s" % text)
+
+func _build_frames_from_debug_output() -> Dictionary:
+	var frames := _parse_frames_from_debug_output()
+	if frames.is_empty():
+		return {}
+	return {
+		"frames": frames,
+		"total_frames": frames.size(),
+		"current_frame": 0,
+		"source": "debug_output"
+	}
+
+func _parse_frames_from_debug_output() -> Array:
+	var publisher = _get_debug_output_publisher()
+	if publisher == null or not publisher.has_method("get_full_log_text"):
+		return []
+	var text = publisher.get_full_log_text()
+	if text.is_empty():
+		return []
+	var lines = text.split("\n", false)
+	var frame_lines: Array = []
+	var collecting := false
+	for i in range(lines.size() - 1, -1, -1):
+		var line := String(lines[i]).strip_edges()
+		if line.begins_with("Frame "):
+			collecting = true
+			frame_lines.push_front(line)
+		elif collecting:
+			break
+	if frame_lines.is_empty():
+		return []
+	var frames := []
+	for line in frame_lines:
+		var frame_dict := _parse_print_stack_line(line)
+		if not frame_dict.is_empty():
+			frames.append(frame_dict)
+	return frames
+
+func _parse_print_stack_line(line: String) -> Dictionary:
+	var trimmed := line.strip_edges()
+	if not trimmed.begins_with("Frame "):
+		return {}
+	var dash_index := trimmed.find(" - ")
+	if dash_index == -1:
+		return {}
+	var index_text := trimmed.substr(6, dash_index - 6).strip_edges()
+	var index_value := 0
+	if index_text.is_valid_int():
+		index_value = int(index_text)
+	var rest := trimmed.substr(dash_index + 3).strip_edges()
+	var func_name := ""
+	var location := rest
+	var at_index := rest.find("@")
+	if at_index != -1:
+		location = rest.substr(0, at_index).strip_edges()
+		func_name = rest.substr(at_index + 1).strip_edges()
+		if func_name.ends_with("()"):
+			func_name = func_name.substr(0, func_name.length() - 2)
+	var script_path := ""
+	var line_number := -1
+	var colon_index := location.rfind(":")
+	if colon_index != -1:
+		var line_text := location.substr(colon_index + 1).strip_edges()
+		if line_text.is_valid_int():
+			line_number = int(line_text)
+		script_path = location.substr(0, colon_index).strip_edges()
+	else:
+		script_path = location
+	return {
+		"index": index_value,
+		"function": func_name,
+		"script": script_path,
+		"file": script_path,
+		"line": line_number,
+		"location": location
+	}
+
+func _get_debug_output_publisher():
+	if Engine.has_meta("MCPDebugOutputPublisher"):
+		return Engine.get_meta("MCPDebugOutputPublisher")
+	return null

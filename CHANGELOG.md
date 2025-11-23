@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2025-11-23
+
+### Changed
+- CLI is quieter by default, with `--verbose` enabling progress logs and server diagnostics.
+- `--list-tools` now prints a colorized table; mixed-content results render with clearer bullets/tags.
+- Simplified CLI invocation: drop the optional `mcp` namespace; use `godot-mcp <tool>` (e.g., `godot-mcp get_debug_output`).
+
+### Added
+- CLI tests for progress streaming, missing tool, invalid params, and JSON-flag arg handling using a new `progress_task` mock tool.
+- `godot-mcp install-addon <path>` to install/update the `godot_mcp` addon into a Godot project’s `addons` folder.
+
 ## 2025-11-17
 
 ### Added

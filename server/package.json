@@ -4,6 +4,9 @@
   "description": "Godot MCP Server using FastMCP",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "godot-mcp": "dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",

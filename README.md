@@ -1,6 +1,6 @@
-# Godot MCP (Model Context Protocol)
+# Godot MCP (Model Context Protocol) + CLI (Command Line Interface)
 
-A comprehensive integration between Godot Engine and AI assistants using the Model Context Protocol (MCP). This plugin allows AI assistants to interact with your Godot projects, providing powerful capabilities for code assistance, scene manipulation, project management, and real-time debugging.
+A comprehensive integration between Godot Engine and AI assistants using the Model Context Protocol (MCP) or Command Line Interface (CLI). This plugin allows AI assistants to interact with your Godot projects, providing powerful capabilities for code assistance, scene manipulation, project management, and real-time debugging. When dealing with extensive context, the command-line interface (CLI) provides an efficient way to manage and interact with the protocol.
 
 ## Features
 
@@ -42,26 +42,34 @@ git clone https://github.com/nguyenchiencong/godot-mcp.git
 cd godot-mcp
 ```
 
-### 2. Set Up the MCP Server
+### 2. Set Up the Server
 
 ```bash
 cd server
 npm install
 npm run build
-# Return to project root
-cd ..
+# Link the CLI
+npm link
 ```
 
-### 3. Add the Plugin to your Godot Project
+### 3. Install the addon to a project
 
-1. Copy the `addons/godot_mcp` folder to your Godot project's `addons` directory
-2. Open your project in Godot
-3. Go to Project > Project Settings > Plugins
-4. Enable the "Godot MCP" plugin
+Copy the `addons/godot_mcp` folder to your Godot project's `addons` directory or use the CLI to install it:
+```bash
+godot-mcp install-addon "C:/path/to/your/project"
+```
 
-### 4. Set Up Coding Assistant
+### 4. Open your project in Godot
 
-1. Add the following configuration (or use the included `mcp.json` as a reference):
+1. Open your project in Godot
+2. Go to Project > Project Settings > Plugins
+3. Enable the "Godot MCP" plugin
+
+## Using the MCP
+
+### Set Up Coding Assistant
+
+1. Add the following configuration to your MCP client:
 
 For STDIO:
 ```json
@@ -94,23 +102,37 @@ For SSE: don't forget to build the server accordingly and start with npm start
 ```
 > **Note**: Replace `PATH_TO_YOUR_PROJECT` with the absolute path to where you have this repository stored.
 
-
-2. Restart the coding assistant
-
-### There's already an Example Project in this repository
-
-1. Open Godot Engine
-2. Select "Import" and navigate to the cloned repository
-3. Open the `project.godot` file
-4. The MCP plugin is already enabled in this example project
-
-## Using MCP
-
 After setup, you can work with your Godot project directly from Claude using natural language. Read the [Getting Started](docs/getting-started.md) guide for more information.
+
+## Using the CLI
+
+The project includes a command-line interface (CLI) for interacting with the server without using the MCP. This is useful for testing, automation, or manual control without eating up your AI assistant's tokens.
+
+### Basic Commands
+
+- **List available tools**:
+```bash
+# List available tools
+godot-mcp --list-tools
+# Get help for a specific tool
+godot-mcp --help get_debug_output
+# Execute a tool
+godot-mcp get_debug_output
+# With arguments
+godot-mcp debugger_set_breakpoint --script_path res://test_debugger.gd --line 42
+```
+
+For more advanced usage and options, see the [CLI Documentation](docs/cli.md).
 
 ## Testing the Debugger
 
 The project includes a comprehensive test setup for debugging:
+
+### There's already an Example Project in this repository
+1. Open Godot Engine
+2. Select "Import" and navigate to the cloned repository
+3. Open the `project.godot` file
+4. The MCP plugin is already enabled in this example project
 
 ### Quick Debugger Test
 1. Start the MCP server: `cd server && npm run start`
@@ -119,40 +141,6 @@ The project includes a comprehensive test setup for debugging:
 4. Enable debugger events: `debugger_enable_events()`
 5. Set a breakpoint: `debugger_set_breakpoint({script_path: "res://test_debugger.gd", line: 42})`
 6. Wait for automatic breakpoint triggers
-
-## Troubleshooting
-
-### Connection Issues
-- Ensure the plugin is enabled in Godot's Project Settings
-- Check the Godot console for any error messages
-- Verify the server is running when Claude Desktop launches it
-
-### Plugin Not Working
-- Reload Godot project after any configuration changes
-- Check for error messages in the Godot console
-- Make sure all paths in your Claude Desktop config are absolute and correct
-
-### Debugger Issues
-
-**"No active debugger session"**
-- Ensure project is running with **F5** (Debug) from Godot Editor (not F6)
-- Check that WebSocket server is running on port 9080
-- Verify the MCP server is connected to Godot
-
-**"Failed to set breakpoint"**
-- Verify script path exists and is correct (use absolute `res://` paths)
-- Check that line number is valid for the target script
-- Ensure the project is running in debug mode
-
-**Missing debugger events**
-- Call `debugger_enable_events()` first to receive event notifications
-- Check WebSocket connection status in server console
-- Verify that only one client has events enabled at a time
-
-**Breakpoint not hitting**
-- Make sure the code execution actually reaches the breakpoint line
-- Check console output for any debugger errors
-- Test with the provided `test_debugger.gd` script to verify functionality
 
 ## Contributing
 

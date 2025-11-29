@@ -104,6 +104,22 @@ Use this document to craft effective prompts when instructing an LLM to interact
 
 ---
 
+## Input Simulation Tools
+
+| Tool | Purpose | Parameters | Example Prompt |
+|------|---------|------------|----------------|
+| `simulate_action_press` | Press and hold an input action until released. | `action` (string), `strength` (optional number 0-1) | "Press and hold the `ui_right` action." |
+| `simulate_action_release` | Release a previously pressed input action. | `action` (string) | "Release the `ui_right` action." |
+| `simulate_action_tap` | Briefly press and release an input action. | `action` (string), `duration_ms` (optional number) | "Tap the `ui_accept` action to confirm the selection." |
+| `simulate_mouse_click` | Click at a screen position. | `x` (number), `y` (number), `button` (optional string), `double_click` (optional bool) | "Click at position (400, 300) to press the start button." |
+| `simulate_mouse_move` | Move the mouse cursor to a position. | `x` (number), `y` (number) | "Move the mouse to (200, 150) to hover over the menu." |
+| `simulate_drag` | Drag from one position to another. | `start_x`, `start_y`, `end_x`, `end_y` (numbers), `duration_ms`, `steps`, `button` (optional) | "Drag from (100, 100) to (300, 200) to move the item." |
+| `simulate_key_press` | Press a keyboard key. | `key` (string), `duration_ms` (optional), `modifiers` (optional object) | "Press the SPACE key to make the character jump." |
+| `simulate_input_sequence` | Execute a sequence of inputs with timing. | `sequence` (array of step objects) | "Execute a combo: press right, wait 100ms, tap jump, tap attack." |
+| `get_input_actions` | List all available input actions in the project. | _none_ | "What input actions are available in this project?" |
+
+---
+
 ### Tips for Prompting
 
 - Always specify absolute node paths (e.g. `./Player`) when referring to scene nodes.
@@ -127,5 +143,20 @@ Use this document to craft effective prompts when instructing an LLM to interact
 
 **Complex Debugging**:
 > "Enable debugger events, set breakpoints at lines 15, 25, and 42 in the enemy AI script, run the game, and pause execution when breakpoints are hit to examine the call stack."
+
+### Input Simulation Tips
+
+- **Runtime Required**: Input simulation only works when the game is running with the debugger attached (F5).
+- **Action Names**: Use `get_input_actions` to discover available actions before simulating them.
+- **Coordinates**: Mouse positions are in screen/viewport space, not world coordinates.
+- **Sequences**: Use `simulate_input_sequence` for complex combos that require precise timing.
+
+### Example Input Workflows
+
+**Testing UI Navigation**:
+> "Run the project, then tap `ui_down` three times to navigate the menu, then tap `ui_accept` to select the highlighted option."
+
+**Automated Game Testing**:
+> "Run the project, simulate pressing `ui_right` for 500ms to move the character, then tap `jump` to make them jump over the obstacle."
 
 Keep this guide handy while constructing system or user prompts so the LLM knows exactly which tools are available and how to use them. 

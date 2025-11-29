@@ -11,6 +11,7 @@ This document provides a reference for the commands available through the Godot 
 - [Project Tools](#project-tools)
 - [Asset Tools](#asset-tools)
 - [Debugger Tools](#debugger-tools)
+- [Input Simulation Tools](#input-simulation-tools)
 - [Enhanced Tools](#enhanced-tools)
 - [Resource Templates](#resource-templates)
 - [Using Commands with Claude](#using-commands-with-claude)
@@ -441,6 +442,158 @@ Get the current debugger state including sessions and execution status.
 ```
 Show me the current debugger state and active sessions.
 ```
+
+## Input Simulation Tools
+
+The input simulation tools allow AI agents to interact with a running Godot game in real-time. These tools can simulate button presses, mouse clicks, drag operations, and complex input sequences for automated testing and game interaction.
+
+**Requirements:**
+- The Godot project must be running with the debugger attached (F5 in editor)
+- The `mcp_input_handler.gd` autoload must be registered in the running game
+
+### simulate_action_press
+Press and hold a Godot input action. The action will remain pressed until released.
+
+**Parameters:**
+- `action` - The action name (e.g., "ui_accept", "ui_left", "jump")
+- `strength` (optional) - Action strength from 0 to 1 (default: 1.0)
+
+**Example:**
+```
+Press and hold the "ui_right" action to move the character right.
+```
+
+### simulate_action_release
+Release a previously pressed input action.
+
+**Parameters:**
+- `action` - The action name to release
+
+**Example:**
+```
+Release the "ui_right" action.
+```
+
+### simulate_action_tap
+Briefly press and release an input action (like pressing a button).
+
+**Parameters:**
+- `action` - The action name
+- `duration_ms` (optional) - How long to hold in milliseconds (default: 100ms)
+
+**Example:**
+```
+Tap the "ui_accept" button to confirm the selection.
+```
+
+### simulate_mouse_click
+Simulate a mouse click at a specific screen position.
+
+**Parameters:**
+- `x` - X coordinate in screen/viewport space
+- `y` - Y coordinate in screen/viewport space
+- `button` (optional) - Mouse button: "left", "right", or "middle" (default: "left")
+- `double_click` (optional) - Perform a double-click (default: false)
+
+**Example:**
+```
+Click at position (400, 300) to press the start button.
+```
+
+### simulate_mouse_move
+Move the mouse cursor to a specific screen position.
+
+**Parameters:**
+- `x` - X coordinate in screen/viewport space
+- `y` - Y coordinate in screen/viewport space
+
+**Example:**
+```
+Move the mouse to (200, 150) to hover over the menu item.
+```
+
+### simulate_drag
+Simulate a drag operation from one position to another.
+
+**Parameters:**
+- `start_x` - Starting X coordinate
+- `start_y` - Starting Y coordinate
+- `end_x` - Ending X coordinate
+- `end_y` - Ending Y coordinate
+- `duration_ms` (optional) - Total drag duration in milliseconds (default: 200ms)
+- `steps` (optional) - Number of intermediate positions (default: 10)
+- `button` (optional) - Mouse button to use (default: "left")
+
+**Example:**
+```
+Drag the inventory item from (100, 200) to (300, 200) to move it to another slot.
+```
+
+### simulate_key_press
+Simulate pressing a keyboard key.
+
+**Parameters:**
+- `key` - Key to press (e.g., "SPACE", "ENTER", "A", "F1", "ESCAPE")
+- `duration_ms` (optional) - How long to hold in milliseconds (default: 100ms)
+- `modifiers` (optional) - Object with modifier keys: `shift`, `ctrl`, `alt`, `meta`
+
+**Example:**
+```
+Press the SPACE key to make the character jump.
+```
+
+### simulate_input_sequence
+Execute a sequence of input actions with precise timing.
+
+**Parameters:**
+- `sequence` - Array of input steps, each with:
+  - `type` - One of: "press", "release", "tap", "wait", "click"
+  - `action` (for press/release/tap) - Action name
+  - `duration_ms` (for tap/wait) - Duration in milliseconds
+  - `x`, `y` (for click) - Click coordinates
+  - `button` (for click) - Mouse button
+
+**Example:**
+```
+Execute a combo: press "ui_right" for 500ms, then tap "jump", wait 100ms, then tap "attack".
+```
+
+**Sequence Example:**
+```json
+{
+  "sequence": [
+    { "type": "press", "action": "ui_right" },
+    { "type": "wait", "duration_ms": 500 },
+    { "type": "tap", "action": "jump", "duration_ms": 100 },
+    { "type": "wait", "duration_ms": 100 },
+    { "type": "tap", "action": "attack" },
+    { "type": "release", "action": "ui_right" }
+  ]
+}
+```
+
+### get_input_actions
+List all available input actions defined in the Godot project.
+
+**Parameters:** None
+
+**Example:**
+```
+What input actions are available in this project?
+```
+
+**Response Contains:**
+- List of action names with their key/button bindings
+- Deadzone settings for each action
+
+**Common Godot UI Actions:**
+- `ui_accept` - Enter/Space
+- `ui_cancel` - Escape
+- `ui_left`, `ui_right`, `ui_up`, `ui_down` - Arrow keys
+- `ui_focus_next` - Tab
+- `ui_focus_prev` - Shift+Tab
+- `ui_page_up`, `ui_page_down` - Page Up/Down
+- `ui_home`, `ui_end` - Home/End
 
 ## Enhanced Tools
 

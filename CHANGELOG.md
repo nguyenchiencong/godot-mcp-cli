@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2025-11-29
+
+### Added
+- **Input Simulation System**: New tools for AI agents to interact with running Godot games in real-time:
+  - `simulate_action_press` / `simulate_action_release` / `simulate_action_tap` - Simulate input actions
+  - `simulate_mouse_click` / `simulate_mouse_move` / `simulate_drag` - Mouse input simulation
+  - `simulate_key_press` - Keyboard input with modifier key support
+  - `simulate_input_sequence` - Execute complex input combos with precise timing
+  - `get_input_actions` - Discover all available input actions in the project
+- `MCPInputHandler` autoload automatically registered when plugin is enabled
+- Runtime input handler (`mcp_input_handler.gd`) for receiving input commands via debugger bridge
+
 ## 2025-11-23
 
 ### Changed

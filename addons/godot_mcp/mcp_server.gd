@@ -9,8 +9,11 @@ var debugger_bridge = null  # Debugger control bridge
 var debug_output_publisher = null  # Live debug output broadcaster
 var _runtime_bridge_warning_logged := false
 var _debugger_bridge_warning_logged := false
-const SCENE_CAPTURE_NAMES := ["scene", "limboai", "mcp_eval"]
+const SCENE_CAPTURE_NAMES := ["scene", "limboai", "mcp_eval", "mcp_input"]
 const STACK_CAPTURE_NAMES := ["stack", "call_stack", "callstack"]
+
+const INPUT_HANDLER_AUTOLOAD_NAME := "MCPInputHandler"
+const INPUT_HANDLER_SCRIPT_PATH := "res://addons/godot_mcp/mcp_input_handler.gd"
 
 func _enter_tree():
 	# Store plugin instance for EditorInterface access
@@ -19,6 +22,7 @@ func _enter_tree():
 	_debugger_bridge_warning_logged = false
 	_try_register_runtime_bridge()
 	_try_register_debugger_bridge()
+	_register_input_handler_autoload()
 
 	print("\n=== MCP SERVER STARTING ===")
 
@@ -102,6 +106,7 @@ func _exit_tree():
 	if Engine.has_meta("MCPDebugOutputPublisher"):
 		Engine.remove_meta("MCPDebugOutputPublisher")
 	_update_debugger_captures(false)
+	_remove_input_handler_autoload()
 
 	if runtime_debugger_bridge:
 		remove_debugger_plugin(runtime_debugger_bridge)
@@ -225,3 +230,31 @@ func _update_debugger_captures(enable: bool) -> void:
 func _on_client_disconnected(client_id: int) -> void:
 	if debug_output_publisher:
 		debug_output_publisher.unsubscribe(client_id)
+
+
+func _register_input_handler_autoload() -> void:
+	# Check if autoload already exists
+	if ProjectSettings.has_setting("autoload/" + INPUT_HANDLER_AUTOLOAD_NAME):
+		print("MCP Input Handler autoload already registered.")
+		return
+	
+	# Verify the script exists
+	if not FileAccess.file_exists(INPUT_HANDLER_SCRIPT_PATH):
+		printerr("MCP Input Handler script not found at: " + INPUT_HANDLER_SCRIPT_PATH)
+		return
+	
+	# Add the autoload
+	ProjectSettings.set_setting("autoload/" + INPUT_HANDLER_AUTOLOAD_NAME, "*" + INPUT_HANDLER_SCRIPT_PATH)
+	ProjectSettings.save()
+	print("MCP Input Handler autoload registered. Restart the game for input simulation to work.")
+
+
+func _remove_input_handler_autoload() -> void:
+	# Check if autoload exists before removing
+	if not ProjectSettings.has_setting("autoload/" + INPUT_HANDLER_AUTOLOAD_NAME):
+		return
+	
+	# Remove the autoload
+	ProjectSettings.set_setting("autoload/" + INPUT_HANDLER_AUTOLOAD_NAME, null)
+	ProjectSettings.save()
+	print("MCP Input Handler autoload removed.")

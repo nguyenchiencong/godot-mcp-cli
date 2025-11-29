@@ -4,6 +4,7 @@ extends EditorDebuggerPlugin
 
 signal scene_tree_updated(session_id: int)
 signal runtime_eval_completed(session_id: int, request_id: int)
+signal input_result_received(session_id: int, request_id: int)
 
 const CAPTURE_SCENE := "scene"
 const VIEW_HAS_VISIBLE_METHOD := 1 << 1
@@ -13,6 +14,7 @@ const DEFAULT_TIMEOUT_MS := 800
 const DEFAULT_EVAL_TIMEOUT_MS := 800
 const SCENE_CAPTURE_NAMES := ["scene", "limboai"]
 const EVAL_CAPTURE_NAME := "mcp_eval"
+const INPUT_CAPTURE_NAME := "mcp_input"
 
 var _sessions: Dictionary = {}
 var _next_eval_request_id: int = 1
@@ -39,6 +41,8 @@ func _has_capture(capture: String) -> bool:
 	for prefix in SCENE_CAPTURE_NAMES:
 		if capture == prefix or capture.begins_with(prefix + ":"):
 			return true
+	if capture == INPUT_CAPTURE_NAME or capture.begins_with(INPUT_CAPTURE_NAME + ":"):
+		return true
 	return false
 
 func _capture(message: String, data: Array, session_id: int) -> bool:
@@ -53,6 +57,9 @@ func _capture(message: String, data: Array, session_id: int) -> bool:
 	elif normalized == "%s:result" % EVAL_CAPTURE_NAME:
 		_trace("received runtime eval result for session %s" % session_id)
 		_store_eval_result(session_id, data)
+	elif normalized == "%s:result" % INPUT_CAPTURE_NAME:
+		_trace("received input result for session %s" % session_id)
+		_store_input_result(session_id, data)
 	return false
 
 func request_runtime_scene_snapshot() -> Dictionary:
@@ -349,7 +356,8 @@ func _ensure_session(session_id: int) -> void:
 			"tree_version": 0,
 			"last_update": 0,
 			"active": false,
-			"eval_results": {}
+			"eval_results": {},
+			"input_results": {}
 		}
 
 func _on_session_started(session_id: int) -> void:
@@ -384,6 +392,9 @@ func _normalize_capture_name(message: String) -> String:
 	if message.begins_with("%s:" % EVAL_CAPTURE_NAME):
 		var eval_suffix := message.substr(EVAL_CAPTURE_NAME.length() + 1)
 		return "%s:%s" % [EVAL_CAPTURE_NAME, eval_suffix]
+	if message.begins_with("%s:" % INPUT_CAPTURE_NAME):
+		var input_suffix := message.substr(INPUT_CAPTURE_NAME.length() + 1)
+		return "%s:%s" % [INPUT_CAPTURE_NAME, input_suffix]
 	if message.ends_with(":scene_tree"):
 		return "scene:scene_tree"
 	return message
@@ -391,3 +402,60 @@ func _normalize_capture_name(message: String) -> String:
 func _trace(text: String) -> void:
 	if OS.is_stdout_verbose():
 		print("[RuntimeBridge] %s" % text)
+
+# Input simulation result handling
+
+func _store_input_result(session_id: int, payload: Array) -> void:
+	_ensure_session(session_id)
+	if payload.is_empty():
+		_trace("input result payload empty")
+		return
+	
+	var entry: Variant = payload[0]
+	if typeof(entry) != TYPE_DICTIONARY:
+		_trace("input result payload not dictionary")
+		return
+	
+	var result_dict: Dictionary = entry.duplicate(true)
+	var request_id := int(result_dict.get("request_id", -1))
+	if request_id < 0:
+		_trace("input result payload missing request_id")
+		return
+	
+	result_dict["_received_at"] = Time.get_ticks_msec()
+	
+	var state: Dictionary = _sessions.get(session_id, {})
+	var results: Dictionary = state.get("input_results", {})
+	results[request_id] = result_dict
+	state["input_results"] = results
+	_sessions[session_id] = state
+	
+	input_result_received.emit(session_id, request_id)
+
+
+func has_input_result(session_id: int, request_id: int) -> bool:
+	if not _sessions.has(session_id):
+		return false
+	var state: Dictionary = _sessions[session_id]
+	var results: Dictionary = state.get("input_results", {})
+	return results.has(request_id)
+
+
+func take_input_result(session_id: int, request_id: int) -> Dictionary:
+	if not _sessions.has(session_id):
+		return {}
+	var state: Dictionary = _sessions[session_id]
+	var results: Dictionary = state.get("input_results", {})
+	if not results.has(request_id):
+		return {}
+	var payload: Variant = results[request_id]
+	results.erase(request_id)
+	state["input_results"] = results
+	_sessions[session_id] = state
+	
+	var response := {}
+	if typeof(payload) == TYPE_DICTIONARY:
+		response = payload.duplicate(true)
+		if response.has("_received_at"):
+			response.erase("_received_at")
+	return response

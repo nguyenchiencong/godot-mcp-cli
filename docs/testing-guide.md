@@ -421,6 +421,77 @@ For detailed debugging scenarios and troubleshooting, see [TESTING_DEBUGGER.md](
 
 ---
 
+## Input Simulation Tools
+
+These tools require a running game with the debugger attached (F5 in editor).
+
+### get_input_actions
+- **Setup**: Run the project with debugging enabled.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run get_input_actions
+  ```
+- **Expected Outcome**: List of available input actions with their key bindings.
+
+### simulate_action_tap
+- **Setup**: Run the project.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run simulate_action_tap --action "ui_accept"
+  ```
+- **Expected Outcome**: Confirmation that the action was tapped. The game should respond as if Enter/Space was pressed.
+
+### simulate_action_press / simulate_action_release
+- **Setup**: Run the project.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run simulate_action_press --action "ui_right"
+  @mcp godot-mcp run simulate_action_release --action "ui_right"
+  ```
+- **Expected Outcome**: The action is pressed and held, then released.
+
+### simulate_mouse_click
+- **Setup**: Run the project.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run simulate_mouse_click --x 400 --y 300
+  ```
+- **Expected Outcome**: Mouse click at the specified position.
+
+### simulate_mouse_move
+- **Setup**: Run the project.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run simulate_mouse_move --x 200 --y 150
+  ```
+- **Expected Outcome**: Mouse cursor moves to position.
+
+### simulate_drag
+- **Setup**: Run the project.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run simulate_drag --start_x 100 --start_y 100 --end_x 300 --end_y 300
+  ```
+- **Expected Outcome**: Drag operation from start to end position.
+
+### simulate_key_press
+- **Setup**: Run the project.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run simulate_key_press --key "A"
+  ```
+- **Expected Outcome**: Key press simulated.
+
+### simulate_input_sequence
+- **Setup**: Run the project.
+- **Command**:
+  ```shell
+  @mcp godot-mcp run simulate_input_sequence --params-json '{"sequence": [{"type": "tap", "action": "ui_left"}, {"type": "wait", "duration_ms": 100}, {"type": "tap", "action": "ui_right"}]}'
+  ```
+- **Expected Outcome**: Sequence of inputs executed in order.
+
+---
+
 ## Cleanup Suggestions
 
 - Delete temporary nodes or scripts created during testing to keep the project tidy.

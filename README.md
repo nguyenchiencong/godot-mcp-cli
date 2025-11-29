@@ -27,11 +27,25 @@ A comprehensive integration between Godot Engine and AI assistants using the Mod
 - **Runtime Debugging**: Full integration with Godot's debugging system
 - **Event-driven Architecture**: Receive breakpoint hits and execution state changes in real-time
 
+### **Input Simulation**
+- **Action Simulation**: Press, release, and tap input actions (`simulate_action_press`, `simulate_action_tap`)
+- **Mouse Control**: Click, move, and drag operations (`simulate_mouse_click`, `simulate_drag`)
+- **Keyboard Input**: Simulate key presses with modifier support (`simulate_key_press`)
+- **Input Sequences**: Execute complex input combos with precise timing (`simulate_input_sequence`)
+- **Action Discovery**: List all available input actions in the project (`get_input_actions`)
+
 ### Enhanced Resources
 - `godot://debugger/state` - Current debugger state and session information
 - `godot://debugger/breakpoints` - Active breakpoints across all scripts
 - `godot://debugger/call-stack/{sessionId?}` - Call stack for specific debug session
 - `godot://debugger/session/{sessionId}` - Detailed session information
+
+### Input Simulation Tools
+- `simulate_action_press` / `simulate_action_release` / `simulate_action_tap` - Input action simulation
+- `simulate_mouse_click` / `simulate_mouse_move` / `simulate_drag` - Mouse input simulation
+- `simulate_key_press` - Keyboard input with modifier support
+- `simulate_input_sequence` - Complex input combos with timing
+- `get_input_actions` - Discover available input actions
 
 ## Quick Setup
 

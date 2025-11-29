@@ -15,6 +15,10 @@ run/main_scene="res://test_main_scene.tscn"
 config/features=PackedStringArray("4.5", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+
+MCPInputHandler="*res://addons/godot_mcp/mcp_input_handler.gd"
+
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/godot_mcp/plugin.cfg")

@@ -1,4 +1,4 @@
-# Godot MCP (Model Context Protocol) + CLI (Command Line Interface)
+# Godot MCP + CLI
 
 A comprehensive integration between Godot Engine and AI assistants using the Model Context Protocol (MCP) or Command Line Interface (CLI). This plugin allows AI assistants to interact with your Godot projects, providing powerful capabilities for code assistance, scene manipulation, project management, and real-time debugging. When dealing with extensive context, the command-line interface (CLI) provides an efficient way to manage and interact with the protocol.
 

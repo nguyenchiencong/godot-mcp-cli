@@ -1,6 +1,13 @@
 # Godot MCP + CLI
 
-A comprehensive integration between Godot Engine and AI assistants using the Model Context Protocol (MCP) or Command Line Interface (CLI). This plugin allows AI assistants to interact with your Godot projects, providing powerful capabilities for code assistance, scene manipulation, project management, and real-time debugging. When dealing with extensive context, the command-line interface (CLI) provides an efficient way to manage and interact with the protocol.
+A Command Line Interface (CLI) for AI assistants to interact with Godot Engine, built on the Model Context Protocol (MCP). The CLI is the recommended way to use this tool as it saves context tokens compared to direct MCP integration.
+
+## When to Use What
+
+| Method | Best For | Token Usage |
+|--------|----------|-------------|
+| **CLI** (recommended) | AI coding assistants, scripting, automation | Low - only tool output in context |
+| **MCP** | Direct MCP client integration | High - full protocol in context |
 
 ## Features
 
@@ -34,19 +41,6 @@ A comprehensive integration between Godot Engine and AI assistants using the Mod
 - **Input Sequences**: Execute complex input combos with precise timing (`simulate_input_sequence`)
 - **Action Discovery**: List all available input actions in the project (`get_input_actions`)
 
-### Enhanced Resources
-- `godot://debugger/state` - Current debugger state and session information
-- `godot://debugger/breakpoints` - Active breakpoints across all scripts
-- `godot://debugger/call-stack/{sessionId?}` - Call stack for specific debug session
-- `godot://debugger/session/{sessionId}` - Detailed session information
-
-### Input Simulation Tools
-- `simulate_action_press` / `simulate_action_release` / `simulate_action_tap` - Input action simulation
-- `simulate_mouse_click` / `simulate_mouse_move` / `simulate_drag` - Mouse input simulation
-- `simulate_key_press` - Keyboard input with modifier support
-- `simulate_input_sequence` - Complex input combos with timing
-- `get_input_actions` - Discover available input actions
-
 ## Quick Setup
 
 ### 1. Clone the Repository
@@ -56,120 +50,114 @@ git clone https://github.com/nguyenchiencong/godot-mcp.git
 cd godot-mcp
 ```
 
-### 2. Set Up the Server
+### 2. Build and Link the CLI
 
 ```bash
 cd server
 npm install
 npm run build
-# Link the CLI
 npm link
 ```
 
-### 3. Install the addon to a project
+### 3. Install the Addon to Your Project
 
-Copy the `addons/godot_mcp` folder to your Godot project's `addons` directory or use the CLI to install it:
 ```bash
-godot-mcp install-addon "C:/path/to/your/project"
+godot-mcp install-addon "path/to/your/project"
 ```
 
-### 4. Open your project in Godot
+Or manually copy the `addons/godot_mcp` folder to your Godot project's `addons` directory.
+
+### 4. Enable the Plugin in Godot
 
 1. Open your project in Godot
 2. Go to Project > Project Settings > Plugins
 3. Enable the "Godot MCP" plugin
 
-## Using the MCP
+## Using the CLI (Recommended)
 
-### Set Up Coding Assistant
+The CLI is the most efficient way for AI assistants to interact with Godot. It consumes fewer tokens than the MCP protocol.
 
-1. Add the following configuration to your MCP client:
+### Basic Commands
 
-For STDIO:
+```bash
+# List all available tools
+godot-mcp --list-tools
+
+# Get help for a specific tool
+godot-mcp --help get_debug_output
+
+# Execute tools
+godot-mcp get_debug_output
+godot-mcp get_project_info
+godot-mcp run_project
+
+# With arguments
+godot-mcp debugger_set_breakpoint --script-path res://test_debugger.gd --line 42
+godot-mcp simulate_action_tap --action ui_accept
+godot-mcp simulate_mouse_click --x 400 --y 300
+```
+
+### CLI Examples
+
+```bash
+# Scene and node operations
+godot-mcp get_current_scene
+godot-mcp get_editor_scene_structure --include-properties true
+godot-mcp list_nodes --parent-path "."
+
+# Debugging
+godot-mcp run_project
+godot-mcp debugger_get_current_state
+godot-mcp debugger_pause_execution
+godot-mcp debugger_resume_execution
+
+# Input simulation (requires running game)
+godot-mcp get_input_actions
+godot-mcp simulate_action_tap --action "ui_accept"
+godot-mcp simulate_key_press --key "SPACE"
+```
+
+For more CLI options, see the [CLI Documentation](docs/cli.md).
+
+## Using the MCP Protocol
+
+For direct MCP client integration, add this configuration:
+
+### STDIO Transport
 ```json
 {
   "mcpServers": {
     "godot-mcp": {
       "command": "node",
-      "args": [
-        "PATH_TO_YOUR_PROJECT/server/dist/index.js"
-      ],
-      "env": {
-        "MCP_TRANSPORT": "stdio"
-      }
+      "args": ["PATH_TO_REPO/server/dist/index.js"],
+      "env": { "MCP_TRANSPORT": "stdio" }
     }
   }
 }
 ```
 
-For SSE: don't forget to build the server accordingly and start with npm start
+### SSE Transport
 ```json
 {
   "mcpServers": {
     "godot-mcp": {
-      "url": "http://localhost:8083/sse",
-      "disabled": false,
-      "alwaysAllow": []
+      "url": "http://localhost:8083/sse"
     }
   }
 }
 ```
-> **Note**: Replace `PATH_TO_YOUR_PROJECT` with the absolute path to where you have this repository stored.
 
-After setup, you can work with your Godot project directly from Claude using natural language. Read the [Getting Started](docs/getting-started.md) guide for more information.
+## Documentation
 
-## Using the CLI
-
-The project includes a command-line interface (CLI) for interacting with the server without using the MCP. This is useful for testing, automation, or manual control without eating up your AI assistant's tokens.
-
-### Basic Commands
-
-- **List available tools**:
-```bash
-# List available tools
-godot-mcp --list-tools
-# Get help for a specific tool
-godot-mcp --help get_debug_output
-# Execute a tool
-godot-mcp get_debug_output
-# With arguments
-godot-mcp debugger_set_breakpoint --script_path res://test_debugger.gd --line 42
-```
-
-For more advanced usage and options, see the [CLI Documentation](docs/cli.md).
-
-## Testing the Debugger
-
-The project includes a comprehensive test setup for debugging:
-
-### There's already an Example Project in this repository
-1. Open Godot Engine
-2. Select "Import" and navigate to the cloned repository
-3. Open the `project.godot` file
-4. The MCP plugin is already enabled in this example project
-
-### Quick Debugger Test
-1. Start the MCP server: `cd server && npm run start`
-2. Open `test_main_scene.tscn` in Godot Editor
-3. Press **F5** to run with debugging enabled
-4. Enable debugger events: `debugger_enable_events()`
-5. Set a breakpoint: `debugger_set_breakpoint({script_path: "res://test_debugger.gd", line: 42})`
-6. Wait for automatic breakpoint triggers
+- [Installation Guide](docs/installation-guide.md)
+- [Command Reference](docs/command-reference.md)
+- [Architecture](docs/architecture.md)
+- [CLI Usage](docs/cli.md)
+- [Tool Prompt Guide](docs/tool-prompt-guide.md)
 
 ## Contributing
 
 No contribution is needed. But, contributions are welcome! Please feel free to submit a Pull Request to the [GitHub repository](https://github.com/nguyenchiencong/godot-mcp).
-
-## Documentation
-
-For more detailed information, check the documentation in the `docs` folder:
-
-- [Getting Started](docs/getting-started.md)
-- [Installation Guide](docs/installation-guide.md)
-- [Command Reference](docs/command-reference.md)
-- [Tool Testing Guide](docs/testing-guide.md)
-- [Architecture](docs/architecture.md)
-- [CLI Usage](docs/cli.md)
 
 ## License
 

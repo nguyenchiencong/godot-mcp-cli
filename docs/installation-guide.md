@@ -1,158 +1,119 @@
 # Godot MCP Installation Guide
 
-This guide walks you through installing and setting up the Godot MCP integration to use Claude with your Godot projects.
-
 ## Prerequisites
 
-- Godot 4.x installed
-- Node.js 18+ and npm installed
-- Claude desktop application with MCP enabled
+- Godot 4.x
+- Node.js 18+ and npm
 
-## Installation Steps
+## Installation
 
-### 1. Install the Godot Addon
+### 1. Clone and Build
 
-1. Copy the `godot_mcp` folder from the `addons` directory to your Godot project's `addons` folder
-2. In your Godot project, go to "Project > Project Settings > Plugins"
-3. Find the "Godot MCP" plugin and enable it
-4. You should now see a "Godot MCP Server" panel in your editor's right dock
+```bash
+git clone https://github.com/nguyenchiencong/godot-mcp.git
+cd godot-mcp/server
+npm install
+npm run build
+npm link
+```
 
-### 2. Set up the MCP Server
+### 2. Install Addon to Your Project
 
-1. Navigate to the `server` directory in your terminal
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Build the TypeScript code:
-   ```bash
-   npm run build
-   ```
+```bash
+godot-mcp install-addon "C:/path/to/your/project"
+```
+
+Or manually copy `addons/godot_mcp` to your project's `addons` folder.
+
+### 3. Enable Plugin
+
+1. Open your project in Godot
+2. Go to Project > Project Settings > Plugins
+3. Enable "Godot MCP"
+
+The WebSocket server starts automatically on port 9080.
 
 ## Usage
 
-### 1. Start the Godot WebSocket Server
+### CLI (Recommended)
 
-1. Open your Godot project
-2. In the "Godot MCP Server" panel, set the port (default: 9080)
-3. Click "Start Server"
-4. You should see a message confirming the server is running
+```bash
+godot-mcp --list-tools           # List available tools
+godot-mcp get_project_info       # Execute a tool
+godot-mcp --help <tool_name>     # Get help for a tool
+```
 
-### 2. Start the MCP Server
+### MCP Protocol
 
-1. In the `server` directory, run:
-   ```bash
-   npm start
-   ```
-2. The server will automatically connect to the Godot WebSocket server
+Add to your MCP client config:
 
-### 3. Connect Claude
+```json
+{
+  "mcpServers": {
+    "godot-mcp": {
+      "command": "node",
+      "args": ["PATH_TO_REPO/server/dist/index.js"],
+      "env": { "MCP_TRANSPORT": "stdio" }
+    }
+  }
+}
+```
 
-1. In Claude desktop app, go to Settings > Developer
-2. Enable Model Context Protocol
-3. Add a new MCP tool with the following configuration:
-   - Name: Godot MCP
-   - Command: `node /path/to/godot-mcp/server/dist/index.js`
-   - Working directory: `/path/to/your/project`
-4. Save the configuration
-5. When chatting with Claude, you can now access Godot tools
+## Testing the Debugger
 
-## Debugger Setup
+This repository includes a test project for verifying debugger functionality.
 
-The debugger integration is included automatically with the Godot MCP addon, but requires specific setup to function properly.
+### Quick Test
 
-### Debugger Prerequisites
+```bash
+# 1. Run the project (from Godot or CLI)
+godot-mcp run_project
 
-- **Godot Editor 4.5+**: Required for EditorDebuggerPlugin support
-- **Debug Mode**: Projects must be run with F5 (Debug), not F6 (Run)
-- **Active Scene**: A scene must be loaded and running for debugging to work
+# 2. Set a breakpoint
+godot-mcp debugger_set_breakpoint --script-path res://test_debugger.gd --line 42
 
-### Enabling Debugger Features
+# 3. Wait for breakpoint hit, then check state
+godot-mcp debugger_get_current_state
+godot-mcp debugger_get_call_stack
 
-The debugger features are automatically available when:
-1. The Godot MCP plugin is enabled
-2. The MCP server is connected to Godot
-3. A project is running in debug mode
+# 4. Resume execution
+godot-mcp debugger_resume_execution
+```
 
-### Testing the Debugger
+### Test Scene Controls
 
-To verify debugger functionality:
+When running `test_main_scene.tscn`:
+- **SPACE** - Trigger manual pause point
+- **R** - Reset counter
+- **T** - Call test function
 
-1. **Open the Test Scene**:
-   - In Godot, open `res://test_main_scene.tscn`
-   - This scene includes `test_debugger.gd` with breakpoints for testing
+The scene auto-triggers breakpoints every ~60 frames.
 
-2. **Start Debugger Events**:
-   ```
-   @mcp godot-mcp run debugger_enable_events
-   ```
+### Debugger Requirements
 
-3. **Set a Test Breakpoint**:
-   ```
-   @mcp godot-mcp run debugger_set_breakpoint --script_path "res://test_debugger.gd" --line 42
-   ```
-
-4. **Run with Debugging**:
-   - Press **F5** in Godot Editor
-   - Wait for automatic breakpoint triggers (every ~60 frames)
-   - Or press **SPACE** for manual pause points
-
-5. **Verify Functionality**:
-   - Check for breakpoint hit notifications
-   - Test pause/resume/step operations
-   - Verify call stack access
-
-For comprehensive testing instructions, see [TESTING_DEBUGGER.md](../TESTING_DEBUGGER.md).
-
-### Debugger Limitations
-
-- **Editor Only**: Only works when running projects from Godot Editor with F5
-- **No Export Support**: Debugger doesn't work in exported builds
-- **Single Client**: Only one MCP client can receive debugger events at a time
-- **Basic Stepping**: Step functionality limited by Godot's debugging API
+- Run with **F5** (Debug) in Godot Editor, not F6
+- WebSocket server must be running (auto-starts with plugin)
+- Only one client can receive debugger events at a time
 
 ## Troubleshooting
 
 ### Connection Issues
 
-If the MCP Server can't connect to Godot:
-1. Make sure the Godot WebSocket server is running (check the panel)
-2. Verify that the port numbers match in both the Godot panel and `godot_connection.ts`
-3. Check for any firewall issues blocking localhost connections
-
-### Command Errors
-
-If commands are failing:
-1. Check the logs in both the Godot panel and terminal running the MCP server
-2. Make sure your Godot project is properly set up and has an active scene
-3. Verify that paths used in commands follow the correct format (usually starting with "res://")
+- Verify WebSocket server is running (check Godot MCP panel)
+- Default port is 9080
+- Check firewall isn't blocking localhost
 
 ### Debugger Issues
 
-**"No active debugger session"**
-- Ensure project is running with **F5** (Debug) from Godot Editor
-- Check that WebSocket server is running on port 9080
-- Verify the MCP server is connected to Godot
+| Problem | Solution |
+|---------|----------|
+| "No active debugger session" | Run project with F5, not F6 |
+| "Failed to set breakpoint" | Check script path exists (`res://...`) |
+| Breakpoint not hitting | Ensure code execution reaches that line |
+| No events received | Call `debugger_enable_events` first |
 
-**"Failed to set breakpoint"**
-- Verify script path exists and is correct (use absolute `res://` paths)
-- Check that line number is valid for the target script
-- Ensure the project is running in debug mode
+### Command Errors
 
-**Missing debugger events**
-- Call `debugger_enable_events()` first to receive event notifications
-- Check WebSocket connection status in server console
-- Verify that only one client has events enabled at a time
-
-**Breakpoint not hitting**
-- Make sure the code execution actually reaches the breakpoint line
-- Check console output for any debugger errors
-- Test with the provided `test_debugger.gd` script to verify functionality
-
-### Getting Help
-
-If you encounter issues:
-1. Check the detailed [DEBUGGER_INTEGRATION.md](../DEBUGGER_INTEGRATION.md) documentation
-2. Review the [TESTING_DEBUGGER.md](../TESTING_DEBUGGER.md) troubleshooting section
-3. Check the Godot console and MCP server logs for error messages
-4. Try the basic test scene to isolate the issue
+- Check Godot console for errors
+- Verify paths use `res://` format
+- Ensure a scene is loaded

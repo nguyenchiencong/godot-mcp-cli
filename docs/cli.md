@@ -13,6 +13,10 @@ Run MCP tools from the command line via the `godot-mcp` binary.
 - Call with params: `godot-mcp debugger_set_breakpoint --script_path res://test_debugger.gd --line 42`
 - Call with JSON params: `godot-mcp debugger_resume_execution --params-json '{"session_id":"default"}' --raw`
 - Install/update addon into a Godot project: `godot-mcp install-addon "path/to/project"`
+- Reload operations:
+  - `godot-mcp rescan_filesystem` - detect external file changes
+  - `godot-mcp reload_scene` - reload current scene from disk
+  - `godot-mcp reload_project --save true` - restart Godot editor
 
 ## Server configuration
 - Default server command: `node dist/index.js` (stdio transport).

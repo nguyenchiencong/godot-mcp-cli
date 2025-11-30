@@ -40,6 +40,9 @@ Quick reference for all available tools. Use `godot-mcp --help <tool>` for detai
 | `run_current_scene` | Run with F6 | (none) |
 | `run_specific_scene` | Run a specific scene | `--scene-path` |
 | `stop_running_project` | Stop running project | (none) |
+| `reload_project` | Restart Godot editor | `--save` (default: true) |
+| `reload_scene` | Reload scene from disk | `--scene-path` (optional) |
+| `rescan_filesystem` | Rescan for file changes | (none) |
 
 ## Asset Tools
 
@@ -137,6 +140,12 @@ godot-mcp get_editor_scene_structure --include-properties true
 godot-mcp run_project
 godot-mcp debugger_set_breakpoint --script-path "res://player.gd" --line 42
 godot-mcp debugger_get_current_state
+
+# Reload operations
+godot-mcp rescan_filesystem
+godot-mcp reload_scene
+godot-mcp reload_scene --scene-path "res://scenes/main.tscn"
+godot-mcp reload_project --save true
 
 # Input simulation
 godot-mcp get_input_actions

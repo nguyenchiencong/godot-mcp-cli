@@ -13,6 +13,15 @@ func process_command(client_id: int, command_type: String, params: Dictionary, c
 		"create_resource":
 			_create_resource(client_id, params, command_id)
 			return true
+		"reload_project":
+			_reload_project(client_id, params, command_id)
+			return true
+		"reload_scene":
+			_reload_scene(client_id, params, command_id)
+			return true
+		"rescan_filesystem":
+			_rescan_filesystem(client_id, params, command_id)
+			return true
 	return false  # Command not handled
 
 func _get_editor_state(client_id: int, params: Dictionary, command_id: String) -> void:
@@ -157,4 +166,72 @@ func _create_resource(client_id: int, params: Dictionary, command_id: String) ->
 	_send_success(client_id, {
 		"resource_path": resource_path,
 		"resource_type": resource_type
+	}, command_id)
+
+func _reload_project(client_id: int, params: Dictionary, command_id: String) -> void:
+	var plugin = Engine.get_meta("GodotMCPPlugin")
+	if not plugin:
+		return _send_error(client_id, "GodotMCPPlugin not found in Engine metadata", command_id)
+	
+	var editor_interface = plugin.get_editor_interface()
+	var save_before_restart: bool = params.get("save", true)
+	
+	# Send success response before restarting (since restart will disconnect)
+	_send_success(client_id, {
+		"status": "restarting",
+		"save": save_before_restart,
+		"message": "Godot editor is restarting..."
+	}, command_id)
+	
+	# Use call_deferred to allow the response to be sent before restart
+	editor_interface.call_deferred("restart_editor", save_before_restart)
+
+func _reload_scene(client_id: int, params: Dictionary, command_id: String) -> void:
+	var plugin = Engine.get_meta("GodotMCPPlugin")
+	if not plugin:
+		return _send_error(client_id, "GodotMCPPlugin not found in Engine metadata", command_id)
+	
+	var editor_interface = plugin.get_editor_interface()
+	var scene_path: String = params.get("scene_path", "")
+	
+	# If no scene path provided, reload the current scene
+	if scene_path.is_empty():
+		var edited_scene_root = editor_interface.get_edited_scene_root()
+		if not edited_scene_root:
+			return _send_error(client_id, "No scene is currently open in the editor", command_id)
+		
+		scene_path = edited_scene_root.scene_file_path
+		if scene_path.is_empty():
+			return _send_error(client_id, "Current scene has not been saved yet", command_id)
+	
+	# Validate scene path
+	if not scene_path.begins_with("res://"):
+		scene_path = "res://" + scene_path
+	
+	if not ResourceLoader.exists(scene_path):
+		return _send_error(client_id, "Scene does not exist: %s" % scene_path, command_id)
+	
+	# Reload the scene from disk
+	editor_interface.reload_scene_from_path(scene_path)
+	
+	_send_success(client_id, {
+		"status": "reloaded",
+		"scene_path": scene_path,
+		"message": "Scene reloaded from disk"
+	}, command_id)
+
+func _rescan_filesystem(client_id: int, params: Dictionary, command_id: String) -> void:
+	var plugin = Engine.get_meta("GodotMCPPlugin")
+	if not plugin:
+		return _send_error(client_id, "GodotMCPPlugin not found in Engine metadata", command_id)
+	
+	var editor_interface = plugin.get_editor_interface()
+	var filesystem = editor_interface.get_resource_filesystem()
+	
+	# Trigger filesystem scan
+	filesystem.scan()
+	
+	_send_success(client_id, {
+		"status": "scanning",
+		"message": "Filesystem rescan initiated"
 	}, command_id)

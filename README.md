@@ -21,6 +21,7 @@ A Command Line Interface (CLI) for AI assistants to interact with Godot Engine, 
 - **Node Management**: Create, remove, list, and inspect nodes with automatic path normalization
 - **Scene Operations**: Open, save, and create scenes; query project info and current scene state
 - **Asset Management**: List assets by type and enumerate project files
+- **Project Reload**: Restart editor, reload scenes, or rescan filesystem for external changes
 - **Debug Output Access**: Snapshot logs with `get_debug_output` or tail them live via `stream_debug_output`
 - **Stack Trace Capture**: Pull the editor's Stack Trace text or grab structured frames via `get_stack_trace_panel` / `get_stack_frames_panel`
 - **Editor Automation**: Execute GDScript in editor context via `execute_editor_script`
@@ -115,6 +116,11 @@ godot-mcp debugger_resume_execution
 godot-mcp get_input_actions
 godot-mcp simulate_action_tap --action "ui_accept"
 godot-mcp simulate_key_press --key "SPACE"
+
+# Reload operations
+godot-mcp rescan_filesystem
+godot-mcp reload_scene
+godot-mcp reload_project
 ```
 
 For more CLI options, see the [CLI Documentation](docs/cli.md).

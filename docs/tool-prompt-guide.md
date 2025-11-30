@@ -47,6 +47,9 @@ Use this document to craft effective prompts when instructing an LLM to interact
 | `stop_running_project` | Stop whatever scene the editor is currently playing. | _none_ | "Stop the running scene and return to the editor." |
 | `run_current_scene` | Play the scene currently open in the editor (F6 behavior). | _none_ | "Run the scene I have open to verify the latest changes." |
 | `run_specific_scene` | Play a specific saved scene by resource path. | `scene_path` (string) | "Run `res://test_main_scene.tscn` so I can test the debugger harness." |
+| `reload_project` | Restart the Godot editor to fully reload the project. | `save` (optional bool, default: true) | "Restart Godot to pick up the plugin changes." |
+| `reload_scene` | Reload a scene from disk, discarding unsaved changes. | `scene_path` (optional string) | "Reload the current scene to discard my changes." |
+| `rescan_filesystem` | Rescan the project filesystem for external file changes. | _none_ | "Rescan the filesystem after I added new assets externally." |
 
 ---
 

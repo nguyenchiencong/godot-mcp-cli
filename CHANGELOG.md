@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2025-11-30
+
+### Added
+- **Project Reload Tools**: New tools for reloading the Godot project without manual intervention:
+  - `reload_project` - Restart the Godot editor (with optional save before restart)
+  - `reload_scene` - Reload current or specific scene from disk
+  - `rescan_filesystem` - Rescan project filesystem for external file changes
+
 ## 2025-11-29
 
 ### Added

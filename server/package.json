@@ -15,7 +15,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "nodemon --watch src --exec \"tsc && node dist/index.js\"",
-    "prepublishOnly": "npm run build && node -e \"require('fs').cpSync('../addons/godot_mcp','./addons/godot_mcp',{recursive:true})\""
+    "prepublishOnly": "npm run build && node -e \"require('fs').cpSync('../addons/godot_mcp','./addons/godot_mcp',{recursive:true})\"",
+    "postpublish": "node -e \"require('fs').rmSync('./addons',{recursive:true,force:true})\""
   },
   "repository": {
     "type": "git",

@@ -7,17 +7,25 @@
 
 ## Installation
 
-### 1. Clone and Build
+### Option 1: Install via npm (Recommended)
 
 ```bash
-git clone https://github.com/nguyenchiencong/godot-mcp.git
-cd godot-mcp/server
+npm install -g godot-mcp-cli
+```
+
+### Option 2: Build from Source
+
+```bash
+git clone https://github.com/nguyenchiencong/godot-mcp-cli.git
+cd godot-mcp-cli/server
 npm install
 npm run build
 npm link
 ```
 
-### 2. Install Addon to Your Project
+## Setup
+
+### 1. Install Addon to Your Project
 
 ```bash
 godot-mcp install-addon "C:/path/to/your/project"
@@ -25,7 +33,7 @@ godot-mcp install-addon "C:/path/to/your/project"
 
 Or manually copy `addons/godot_mcp` to your project's `addons` folder.
 
-### 3. Enable Plugin
+### 2. Enable Plugin
 
 1. Open your project in Godot
 2. Go to Project > Project Settings > Plugins
@@ -51,8 +59,21 @@ Add to your MCP client config:
 {
   "mcpServers": {
     "godot-mcp": {
+      "command": "godot-mcp",
+      "env": { "MCP_TRANSPORT": "stdio" }
+    }
+  }
+}
+```
+
+Or if running from source:
+
+```json
+{
+  "mcpServers": {
+    "godot-mcp": {
       "command": "node",
-      "args": ["PATH_TO_REPO/server/dist/index.js"],
+      "args": ["path/to/godot-mcp-cli/server/dist/index.js"],
       "env": { "MCP_TRANSPORT": "stdio" }
     }
   }

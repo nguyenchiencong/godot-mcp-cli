@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.0.0 - 2025-12-06
+
+### Added
+- **npm Package**: Published to npm as `godot-mcp-cli` for easy installation via `npm install -g godot-mcp-cli`
+- **Cross-platform Addon Installation**: `godot-mcp install-addon <path>` command copies the Godot addon to any project
+
+### Changed
+- **Project Structure**: Addon source lives in `addons/godot_mcp/`, automatically copied to npm package on publish
+- **Package Name**: `godot-mcp-cli` (binary remains `godot-mcp` for convenience)
+
 ## 2025-11-30
 
 ### Added

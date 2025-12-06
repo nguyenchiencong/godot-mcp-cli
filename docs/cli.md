@@ -3,8 +3,14 @@
 Run MCP tools from the command line via the `godot-mcp` binary.
 
 ## Installation
-- Build the server: `cd server && npm run build`
-- Link or install globally: `cd server && npm link` (or `npm install -g ./server`)
+
+```bash
+# Option 1: Install via npm (recommended)
+npm install -g godot-mcp-cli
+
+# Option 2: Build from source
+cd server && npm run build && npm link
+```
 
 ## Examples
 - List tools: `godot-mcp --list-tools`

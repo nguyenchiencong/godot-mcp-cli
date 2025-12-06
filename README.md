@@ -1,6 +1,9 @@
-# Godot MCP + CLI
+# Godot MCP CLI
 
 A Command Line Interface (CLI) for AI assistants to interact with Godot Engine, built on the Model Context Protocol (MCP). The CLI is the recommended way to use this tool as it saves context tokens compared to direct MCP integration.
+
+[![npm version](https://img.shields.io/npm/v/godot-mcp-cli.svg)](https://www.npmjs.com/package/godot-mcp-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## When to Use What
 
@@ -42,25 +45,27 @@ A Command Line Interface (CLI) for AI assistants to interact with Godot Engine, 
 - **Input Sequences**: Execute complex input combos with precise timing (`simulate_input_sequence`)
 - **Action Discovery**: List all available input actions in the project (`get_input_actions`)
 
-## Quick Setup
+## Installation
 
-### 1. Clone the Repository
+### Option 1: Install via npm (Recommended)
 
 ```bash
-git clone https://github.com/nguyenchiencong/godot-mcp.git
-cd godot-mcp
+npm install -g godot-mcp-cli
 ```
 
-### 2. Build and Link the CLI
+### Option 2: Build from Source
 
 ```bash
-cd server
+git clone https://github.com/nguyenchiencong/godot-mcp-cli.git
+cd godot-mcp-cli/server
 npm install
 npm run build
 npm link
 ```
 
-### 3. Install the Addon to Your Project
+## Quick Setup
+
+### 1. Install the Addon to Your Godot Project
 
 ```bash
 godot-mcp install-addon "path/to/your/project"
@@ -68,7 +73,7 @@ godot-mcp install-addon "path/to/your/project"
 
 Or manually copy the `addons/godot_mcp` folder to your Godot project's `addons` directory.
 
-### 4. Enable the Plugin in Godot
+### 2. Enable the Plugin in Godot
 
 1. Open your project in Godot
 2. Go to Project > Project Settings > Plugins
@@ -129,13 +134,25 @@ For more CLI options, see the [CLI Documentation](docs/cli.md).
 
 For direct MCP client integration, add this configuration:
 
-### STDIO Transport
+### STDIO Transport (after npm install -g)
+```json
+{
+  "mcpServers": {
+    "godot-mcp": {
+      "command": "godot-mcp",
+      "env": { "MCP_TRANSPORT": "stdio" }
+    }
+  }
+}
+```
+
+### STDIO Transport (from source)
 ```json
 {
   "mcpServers": {
     "godot-mcp": {
       "command": "node",
-      "args": ["PATH_TO_REPO/server/dist/index.js"],
+      "args": ["path/to/godot-mcp-cli/server/dist/index.js"],
       "env": { "MCP_TRANSPORT": "stdio" }
     }
   }
@@ -163,7 +180,7 @@ For direct MCP client integration, add this configuration:
 
 ## Contributing
 
-No contribution is needed. But, contributions are welcome! Please feel free to submit a Pull Request to the [GitHub repository](https://github.com/nguyenchiencong/godot-mcp).
+Contributions are welcome! Please feel free to submit a Pull Request to the [GitHub repository](https://github.com/nguyenchiencong/godot-mcp-cli).
 
 ## License
 

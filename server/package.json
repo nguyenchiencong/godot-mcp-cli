@@ -1,26 +1,44 @@
 {
-  "name": "godot-mcp-server",
+  "name": "godot-mcp-cli",
   "version": "1.0.0",
-  "description": "Godot MCP Server using FastMCP",
+  "description": "CLI and MCP server for AI assistants to interact with Godot Engine",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "godot-mcp": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "addons"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "nodemon --watch src --exec \"tsc && node dist/index.js\""
+    "dev": "nodemon --watch src --exec \"tsc && node dist/index.js\"",
+    "prepublishOnly": "npm run build && node -e \"require('fs').cpSync('../addons/godot_mcp','./addons/godot_mcp',{recursive:true})\""
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyenchiencong/godot-mcp-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nguyenchiencong/godot-mcp-cli/issues"
+  },
+  "homepage": "https://github.com/nguyenchiencong/godot-mcp-cli#readme",
   "keywords": [
     "godot",
     "mcp",
     "fastmcp",
     "claude",
-    "ai"
+    "ai",
+    "cli",
+    "game-development"
   ],
-  "author": "",
+  "author": "can0pus",
   "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "fastmcp": "^1.20.4",
     "websocket": "^1.0.35",

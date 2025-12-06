@@ -3,11 +3,15 @@
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { McpError } from '@modelcontextprotocol/sdk/types.js';
 import fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json');
 
 type CliAction = 'list' | 'help' | 'call' | 'install';
 
@@ -38,7 +42,7 @@ type ToolSummary = {
   };
 };
 
-const DEFAULT_CLIENT_INFO = { name: 'godot-mcp-cli', version: '1.0.0' };
+const DEFAULT_CLIENT_INFO = { name: pkg.name, version: pkg.version };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_SERVER_ENTRY = path.join(__dirname, 'index.js');
@@ -241,7 +245,7 @@ async function copyAddon(targetProjectPath: string): Promise<void> {
     throw new Error(`Not a Godot project (project.godot not found at ${projectPath})`);
   }
 
-  const sourceAddon = path.resolve(__dirname, '..', '..', 'addons', 'godot_mcp');
+  const sourceAddon = path.resolve(__dirname, '..', 'addons', 'godot_mcp');
   if (!(await pathExists(sourceAddon))) {
     throw new Error(`Source addon not found at ${sourceAddon}`);
   }

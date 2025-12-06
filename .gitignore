@@ -23,6 +23,7 @@ mono_crash.*.json
 node_modules/
 npm-debug.log
 dist/
+server/addons/
 
 # System files
 .DS_Store
@@ -44,6 +45,7 @@ __pycache__/
 
 .vscode/
 TRASH.md
+UPDATE.md
 CLAUDE.md
 AGENTS.md
 examples/

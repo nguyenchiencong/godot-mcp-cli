@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.0.5 - 2025-12-09
+
+### Fixed
+- **Debugger Warning**: Fixed "Unknown message: mcp_input:result" warning in Godot editor by returning `true` from `_capture()` when messages are successfully handled in `mcp_runtime_debugger_bridge.gd`
+
 ## 1.0.4 - 2025-12-09
 
 ### Fixed

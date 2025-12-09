@@ -54,12 +54,15 @@ func _capture(message: String, data: Array, session_id: int) -> bool:
 			return false
 		_trace("storing scene tree for session %s (size=%s)" % [session_id, data.size()])
 		_store_scene_tree(session_id, data)
+		return true
 	elif normalized == "%s:result" % EVAL_CAPTURE_NAME:
 		_trace("received runtime eval result for session %s" % session_id)
 		_store_eval_result(session_id, data)
+		return true
 	elif normalized == "%s:result" % INPUT_CAPTURE_NAME:
 		_trace("received input result for session %s" % session_id)
 		_store_input_result(session_id, data)
+		return true
 	return false
 
 func request_runtime_scene_snapshot() -> Dictionary:

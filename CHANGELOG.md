@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.0.4 - 2025-12-09
+
+### Fixed
+- **CLI Compatibility**: Pinned `@modelcontextprotocol/sdk` to 1.6.0 to fix "Server does not support completions" error when running CLI commands
+- **npm Package**: README.md now displays correctly on the npm package page
+- **Dependency Cleanup**: postpublish script properly cleans up copied files after npm publish
+
 ## 1.0.0 - 2025-12-06
 
 ### Added

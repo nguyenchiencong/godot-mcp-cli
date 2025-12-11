@@ -100,13 +100,25 @@ func list_assets_by_type(type: String) -> Dictionary:
 		"models": [".glb", ".gltf", ".obj", ".fbx"],
 		"shaders": [".gdshader", ".shader"],
 		"resources": [".tres", ".res", ".theme", ".material"],
+		"scripts": [".gd"],
+		"scenes": [".tscn"],
 		"all": [] # Will retrieve everything
 	}
-	
+
 	# Get extensions for the requested type
 	var extensions = []
 	if extension_map.has(type):
 		extensions = extension_map[type]
+	else:
+		# If type not found, return empty result
+		return {
+			"assetType": type,
+			"extensions": [],
+			"count": 0,
+			"files": [],
+			"organizedFiles": {},
+			"error": "Unknown asset type: %s. Valid types are: %s" % [type, ", ".join(extension_map.keys())]
+		}
 	
 	# Get files
 	var file_result = list_project_files(extensions)

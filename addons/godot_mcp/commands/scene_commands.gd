@@ -19,6 +19,9 @@ func process_command(client_id: int, command_type: String, params: Dictionary, c
 		"create_scene":
 			_create_scene(client_id, params, command_id)
 			return true
+		"delete_scene":
+			_delete_scene(client_id, params, command_id)
+			return true
 	return false  # Command not handled
 
 func _save_scene(client_id: int, params: Dictionary, command_id: String) -> void:
@@ -283,4 +286,52 @@ func _create_scene(client_id: int, params: Dictionary, command_id: String) -> vo
 	_send_success(client_id, {
 		"scene_path": path,
 		"root_node_type": root_node_type
+	}, command_id)
+
+func _delete_scene(client_id: int, params: Dictionary, command_id: String) -> void:
+	var path = params.get("path", "")
+
+	# Validation
+	if path.is_empty():
+		return _send_error(client_id, "Scene path cannot be empty", command_id)
+
+	# Make sure we have an absolute path
+	if not path.begins_with("res://"):
+		path = "res://" + path
+
+	# Ensure path ends with .tscn
+	if not path.ends_with(".tscn"):
+		path += ".tscn"
+
+	# Check if file exists
+	if not FileAccess.file_exists(path):
+		return _send_error(client_id, "Scene file not found: %s" % path, command_id)
+
+	# Check if this is the currently open scene
+	var plugin = Engine.get_meta("GodotMCPPlugin") if Engine.has_meta("GodotMCPPlugin") else null
+	if plugin and plugin.has_method("get_editor_interface"):
+		var editor_interface = plugin.get_editor_interface()
+		var edited_scene_root = editor_interface.get_edited_scene_root()
+
+		if edited_scene_root and edited_scene_root.scene_file_path == path:
+			return _send_error(client_id, "Cannot delete currently open scene: %s. Close it first." % path, command_id)
+
+	# Delete the file
+	var dir = DirAccess.open("res://")
+	if not dir:
+		return _send_error(client_id, "Failed to access project directory", command_id)
+
+	var result = dir.remove(path)
+	if result != OK:
+		return _send_error(client_id, "Failed to delete scene file: %d" % result, command_id)
+
+	# Rescan the filesystem to update the editor
+	if plugin and plugin.has_method("get_editor_interface"):
+		var editor_interface = plugin.get_editor_interface()
+		var filesystem = editor_interface.get_resource_filesystem()
+		if filesystem:
+			filesystem.scan()
+
+	_send_success(client_id, {
+		"scene_path": path
 	}, command_id)

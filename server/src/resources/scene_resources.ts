@@ -1,11 +1,9 @@
-import { Resource, ResourceTemplate } from 'fastmcp';
 import { getGodotConnection } from '../utils/godot_connection.js';
-import { z } from 'zod';
 
 /**
  * Resource that provides a list of all scenes in the project
  */
-export const sceneListResource: Resource = {
+export const sceneListResource = {
   uri: 'godot/scenes',
   name: 'Godot Scene List',
   mimeType: 'application/json',
@@ -43,7 +41,7 @@ export const sceneListResource: Resource = {
 /**
  * Resource that provides detailed information about a specific scene
  */
-export const sceneStructureResource: Resource = {
+export const sceneStructureResource = {
     uri: 'godot/scene/current',
     name: 'Godot Scene Structure',
     mimeType: 'application/json',
@@ -70,7 +68,7 @@ export const sceneStructureResource: Resource = {
 /**
  * Resource that provides the complete scene tree hierarchy
  */
-export const fullSceneTreeResource: Resource = {
+export const fullSceneTreeResource = {
   uri: 'godot/scene/tree',
   name: 'Full Scene Tree',
   mimeType: 'application/json',

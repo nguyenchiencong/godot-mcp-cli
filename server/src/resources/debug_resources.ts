@@ -1,10 +1,9 @@
-import { Resource } from 'fastmcp';
 import { getGodotConnection } from '../utils/godot_connection.js';
 
 /**
  * Resource that provides access to Godot's debug output log
  */
-export const debugOutputResource: Resource = {
+export const debugOutputResource = {
   uri: 'godot/debug/log',
   name: 'Godot Debug Output',
   mimeType: 'text/plain',

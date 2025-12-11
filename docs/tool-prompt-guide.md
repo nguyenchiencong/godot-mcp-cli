@@ -30,9 +30,10 @@ Use this document to craft effective prompts when instructing an LLM to interact
 
 | Tool | Purpose | Parameters | Example Prompt |
 |------|---------|------------|----------------|
-| `create_scene` | Create a new scene file with optional root node type. | `path` (string), `root_node_type` (optional string) | “Create `res://scenes/shop.tscn` with a `Control` root.” |
-| `save_scene` | Save the current scene, optionally overriding the path. | `path` (optional string) | “Save our current scene as `res://scenes/level_02.tscn`.” |
-| `open_scene` | Open a scene in the editor. | `path` (string) | “Open `res://scenes/menu.tscn` in the editor.” |
+| `create_scene` | Create a new scene file with optional root node type. | `path` (string), `root_node_type` (optional string) | "Create `res://scenes/shop.tscn` with a `Control` root." |
+| `delete_scene` | Delete a scene file from the project. | `path` (string) | "Delete the scene `res://scenes/old_level.tscn`." |
+| `save_scene` | Save the current scene, optionally overriding the path. | `path` (optional string) | "Save our current scene as `res://scenes/level_02.tscn`." |
+| `open_scene` | Open a scene in the editor. | `path` (string) | "Open `res://scenes/menu.tscn` in the editor." |
 | `get_current_scene` | Summarize the active scene. | _none_ | “Which scene is currently open?” |
 | `get_project_info` | Report project metadata, Godot version, and current scene. | _none_ | “Show me the project name, version, and current scene path.” |
 | `create_resource` | Create a Godot resource file with preset properties. | `resource_type` (string), `resource_path` (string), `properties` (optional dict) | "Create a `StyleBoxFlat` at `res://ui/button_style.tres` with `bg_color` set to `#2f6fff`." |
@@ -65,7 +66,7 @@ Use this document to craft effective prompts when instructing an LLM to interact
 
 | Tool | Purpose | Parameters | Example Prompt |
 |------|---------|------------|----------------|
-| `list_assets_by_type` | Enumerate assets filtered by type. | `type` (string; `images`, `audio`, `fonts`, `models`, `shaders`, `resources`, `all`) | “List all `audio` assets in the project.” |
+| `list_assets_by_type` | Enumerate assets filtered by type. | `type` (string; `scripts`, `scenes`, `images`, `audio`, `fonts`, `models`, `shaders`, `resources`, `all`) | "List all `scripts` in the project." |
 | `list_project_files` | List project files matching specific extensions. | `extensions` (optional array of strings) | “Show all `.tscn` and `.gd` files.” |
 
 ---

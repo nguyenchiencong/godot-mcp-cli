@@ -1,4 +1,3 @@
-import { Resource, ResourceTemplate } from 'fastmcp';
 import { getGodotConnection } from '../utils/godot_connection.js';
 
 type AssetType = 'images' | 'audio' | 'fonts' | 'models' | 'shaders' | 'resources' | 'all';
@@ -27,7 +26,7 @@ interface AssetQueryParams {
 /**
  * Resource for retrieving asset lists
  */
-export const assetListResource: Resource = {
+export const assetListResource = {
   uri: 'godot/assets',
   name: 'Asset List',
   mimeType: 'application/json',
@@ -76,17 +75,18 @@ export const assetListResource: Resource = {
 /**
  * Template resource for retrieving assets filtered by type.
  */
-export const assetByTypeResourceTemplate: ResourceTemplate = {
+export const assetByTypeResourceTemplate = {
   uriTemplate: 'godot/assets/{type}',
   name: 'Typed Asset List',
   mimeType: 'application/json',
   arguments: [
     {
-      name: 'type',
-      description: 'Asset category (images, audio, fonts, models, shaders, resources, all)'
+      name: 'type' as const,
+      description: 'Asset category (images, audio, fonts, models, shaders, resources, all)',
+      required: true
     }
   ],
-  async load({ type }) {
+  async load({ type }: { type: string }) {
     const godot = getGodotConnection();
 
     try {

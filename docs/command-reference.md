@@ -26,6 +26,7 @@ Quick reference for all available tools. Use `godot-mcp --help <tool>` for detai
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `create_scene` | Create a new scene | `--path`, `--root-node-type` |
+| `delete_scene` | Delete a scene file | `--path` |
 | `save_scene` | Save current scene | `--path` (optional) |
 | `open_scene` | Open a scene | `--path` |
 | `get_current_scene` | Get current scene info | (none) |
@@ -48,7 +49,7 @@ Quick reference for all available tools. Use `godot-mcp --help <tool>` for detai
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `list_assets_by_type` | List assets | `--type` (images/audio/fonts/models/shaders/resources/all) |
+| `list_assets_by_type` | List assets | `--type` (scripts/scenes/images/audio/fonts/models/shaders/resources/all) |
 | `list_project_files` | List files by extension | `--extensions` |
 
 ## Debugger Tools

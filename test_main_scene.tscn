@@ -6,6 +6,7 @@
 size = Vector2(80, 80)
 
 [node name="TestMainScene" type="Node"]
+editor_description = "Test"
 script = ExtResource("1_0k8xr")
 
 [node name="UI" type="Control" parent="."]
@@ -71,3 +72,5 @@ shape = SubResource("RectangleShape2D_1x8xr")
 [node name="Grandchild" type="Node" parent="TestNode/Child1"]
 
 [node name="Child2" type="Node" parent="TestNode"]
+
+[node name="@Node2D@22082" type="Node2D" parent="."]

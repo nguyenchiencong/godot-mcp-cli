@@ -24,6 +24,10 @@ interface CreateResourceParams {
   properties?: Record<string, any>;
 }
 
+interface DeleteSceneParams {
+  path: string;
+}
+
 /**
  * Definition for scene tools - operations that manipulate Godot scenes
  */
@@ -45,6 +49,25 @@ export const sceneTools: MCPTool[] = [
         return `Created new scene at ${result.scene_path} with root node type ${result.root_node_type}`;
       } catch (error) {
         throw new Error(`Failed to create scene: ${(error as Error).message}`);
+      }
+    },
+  },
+
+  {
+    name: 'delete_scene',
+    description: 'Delete a scene file from the project',
+    parameters: z.object({
+      path: z.string()
+        .describe('Path to the scene file to delete (e.g. "res://scenes/old_scene.tscn")'),
+    }),
+    execute: async ({ path }: DeleteSceneParams): Promise<string> => {
+      const godot = getGodotConnection();
+      
+      try {
+        const result = await godot.sendCommand<CommandResult>('delete_scene', { path });
+        return `Deleted scene at ${result.scene_path}`;
+      } catch (error) {
+        throw new Error(`Failed to delete scene: ${(error as Error).message}`);
       }
     },
   },

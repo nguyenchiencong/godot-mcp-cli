@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.0.7 - 2025-12-11
+
+### Added
+- `delete_scene` tool/command to delete scene files from the project, complementing the existing `create_scene` tool
+- Support for "scripts" and "scenes" asset types in `list_assets_by_type` tool (previously only supported images, audio, fonts, models, shaders, resources)
+- Comprehensive test suite in `server/tests/tools.test.js` covering all 54 MCP tools across 9 categories with automatic cleanup of generated test files
+
+### Fixed
+- `list_assets_by_type` now correctly filters by asset type instead of returning all project files when requesting scripts
+- `list_assets_by_type` now returns helpful error message for unknown asset types with list of valid types
+- `delete_scene` prevents deletion of currently open scenes with clear error message
+
+### Changed
+- Consolidated test suite: removed 7 redundant individual test files (call-stack.test.js, pause.test.js, resume.test.js, stack-frames-panel.test.js, stack-trace-panel.test.js, editor-errors.test.js, debugger.test.js) in favor of comprehensive `tools.test.js`
+- Test suite now includes automatic cleanup of generated files (scripts, scenes, resources) with final cleanup pass
+
+## 1.0.6 - 2025-12-11
+
+### Changed
+- **Dependency Upgrade**: Upgraded `fastmcp` from 1.20.4 to 3.25.4
+  - Removed direct `@modelcontextprotocol/sdk` dependency (now managed by fastmcp internally)
+  - Removed `overrides` block from package.json
+  - Updated resource template files to use `as const` for argument names (TypeScript inference requirement in 3.x)
+  - Core API (`FastMCP`, `addTool`, `addResource`, etc.) remains compatible
+
 ## 1.0.5 - 2025-12-09
 
 ### Fixed

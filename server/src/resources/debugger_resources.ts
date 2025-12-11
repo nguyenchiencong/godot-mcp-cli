@@ -1,11 +1,9 @@
-import { Resource, ResourceTemplate } from 'fastmcp';
 import { getGodotConnection } from '../utils/godot_connection.js';
-import { z } from 'zod';
 
 /**
  * Resource for accessing current debugger state including breakpoints and execution status
  */
-export const debuggerStateResource: Resource = {
+export const debuggerStateResource = {
   uri: 'godot://debugger/state',
   name: 'Debugger State',
   description: 'Current state of the Godot debugger including breakpoints, sessions, and execution status',
@@ -27,7 +25,7 @@ export const debuggerStateResource: Resource = {
 /**
  * Resource for accessing active debugger breakpoints
  */
-export const debuggerBreakpointsResource: Resource = {
+export const debuggerBreakpointsResource = {
   uri: 'godot://debugger/breakpoints',
   name: 'Debugger Breakpoints',
   description: 'List of all currently set breakpoints in the debugger',
@@ -49,18 +47,19 @@ export const debuggerBreakpointsResource: Resource = {
 /**
  * Resource template for accessing debugger call stack information
  */
-export const debuggerCallStackResourceTemplate: ResourceTemplate = {
+export const debuggerCallStackResourceTemplate = {
   uriTemplate: 'godot://debugger/call-stack/{sessionId?}',
   name: 'Debugger Call Stack',
   description: 'Call stack information for a specific debug session (or active session if not specified)',
   mimeType: 'application/json',
   arguments: [
     {
-      name: 'sessionId',
-      description: 'Optional debug session ID (will use active session if not provided)'
+      name: 'sessionId' as const,
+      description: 'Optional debug session ID (will use active session if not provided)',
+      required: false
     }
   ],
-  async load({ sessionId }) {
+  async load({ sessionId }: { sessionId?: string }) {
     const godot = getGodotConnection();
 
     try {
@@ -79,18 +78,19 @@ export const debuggerCallStackResourceTemplate: ResourceTemplate = {
 /**
  * Resource template for accessing debugger session information
  */
-export const debuggerSessionResourceTemplate: ResourceTemplate = {
+export const debuggerSessionResourceTemplate = {
   uriTemplate: 'godot://debugger/session/{sessionId}',
   name: 'Debugger Session',
   description: 'Detailed information about a specific debugger session',
   mimeType: 'application/json',
   arguments: [
     {
-      name: 'sessionId',
-      description: 'Debug session ID'
+      name: 'sessionId' as const,
+      description: 'Debug session ID',
+      required: true
     }
   ],
-  async load({ sessionId }) {
+  async load({ sessionId }: { sessionId: string }) {
     const godot = getGodotConnection();
 
     try {

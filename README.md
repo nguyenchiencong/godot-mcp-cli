@@ -22,7 +22,7 @@ A Command Line Interface (CLI) for AI assistants to interact with Godot Engine, 
 - **Dynamic Script Access**: Read scripts via `godot://script/{path}` and metadata via `godot://script/{path}/metadata`
 - **Script Editing Tools**: Create, edit, or template scripts directly through MCP commands
 - **Node Management**: Create, remove, list, and inspect nodes with automatic path normalization
-- **Scene Operations**: Open, save, and create scenes; query project info and current scene state
+- **Scene Operations**: Create, delete, open, and save scenes; query project info and current scene state
 - **Asset Management**: List assets by type and enumerate project files
 - **Project Reload**: Restart editor, reload scenes, or rescan filesystem for external changes
 - **Debug Output Access**: Snapshot logs with `get_debug_output` or tail them live via `stream_debug_output`

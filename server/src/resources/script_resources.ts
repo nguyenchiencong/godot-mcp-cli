@@ -1,10 +1,9 @@
-import { Resource, ResourceTemplate } from 'fastmcp';
 import { getGodotConnection } from '../utils/godot_connection.js';
 
 /**
  * Resource for script list
  */
-export const scriptListResource: Resource = {
+export const scriptListResource = {
   uri: 'godot/scripts',
   name: 'Script List',
   mimeType: 'application/json',
@@ -44,17 +43,18 @@ export const scriptListResource: Resource = {
 /**
  * Template resource for retrieving script content by path.
  */
-export const scriptByPathResourceTemplate: ResourceTemplate = {
+export const scriptByPathResourceTemplate = {
   uriTemplate: 'godot/script/{path}',
   name: 'Script Content By Path',
   mimeType: 'text/plain',
   arguments: [
     {
-      name: 'path',
-      description: 'Path to the script (e.g. res://scripts/player.gd)'
+      name: 'path' as const,
+      description: 'Path to the script (e.g. res://scripts/player.gd)',
+      required: true
     }
   ],
-  async load({ path }) {
+  async load({ path }: { path: string }) {
     const godot = getGodotConnection();
     try {
       if (!path || path.trim() === '') {
@@ -91,17 +91,18 @@ export const scriptByPathResourceTemplate: ResourceTemplate = {
 /**
  * Template resource for retrieving script metadata by path.
  */
-export const scriptMetadataResourceTemplate: ResourceTemplate = {
+export const scriptMetadataResourceTemplate = {
   uriTemplate: 'godot/script/{path}/metadata',
   name: 'Script Metadata By Path',
   mimeType: 'application/json',
   arguments: [
     {
-      name: 'path',
-      description: 'Path to the script (e.g. res://scripts/player.gd)'
+      name: 'path' as const,
+      description: 'Path to the script (e.g. res://scripts/player.gd)',
+      required: true
     }
   ],
-  async load({ path }) {
+  async load({ path }: { path: string }) {
     const godot = getGodotConnection();
     try {
       if (!path || path.trim() === '') {

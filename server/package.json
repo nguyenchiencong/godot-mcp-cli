@@ -1,6 +1,6 @@
 {
   "name": "godot-mcp-cli",
-  "version": "1.0.5",
+  "version": "1.0.7",
   "description": "CLI and MCP server for AI assistants to interact with Godot Engine",
   "type": "module",
   "main": "dist/index.js",
@@ -15,6 +15,10 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "nodemon --watch src --exec \"tsc && node dist/index.js\"",
+    "test": "node tests/tools.test.js --skip-runtime",
+    "test:all": "node tests/tools.test.js",
+    "test:cli": "node tests/cli.test.js",
+    "test:debugger": "node tests/debugger.test.js",
     "prepublishOnly": "npm run build && node -e \"require('fs').cpSync('../addons/godot_mcp','./addons/godot_mcp',{recursive:true});require('fs').cpSync('../README.md','./README.md')\"",
     "postpublish": "node -e \"require('fs').rmSync('./addons',{recursive:true,force:true});require('fs').rmSync('./README.md',{force:true})\""
   },
@@ -41,8 +45,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.6.0",
-    "fastmcp": "1.20.4",
+    "fastmcp": "^3.25.4",
     "websocket": "^1.0.35",
     "ws": "^8.13.0",
     "zod": "^3.21.4"
@@ -52,8 +55,5 @@
     "@types/ws": "^8.5.5",
     "nodemon": "^3.1.9",
     "typescript": "^5.1.3"
-  },
-  "overrides": {
-    "@modelcontextprotocol/sdk": "1.6.0"
   }
 }

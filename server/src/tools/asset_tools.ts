@@ -12,7 +12,7 @@ export const assetTools: MCPTool[] = [
     description: 'List all assets of a specific type in the project',
     parameters: z.object({
       type: z.string()
-        .describe('Type of assets to list (e.g. "images", "audio", "models", "all")'),
+        .describe('Type of assets to list. Valid types: "scripts" (.gd), "scenes" (.tscn), "images" (.png, .jpg, etc.), "audio" (.ogg, .mp3, .wav), "fonts" (.ttf, .otf), "models" (.glb, .gltf, .obj, .fbx), "shaders" (.gdshader), "resources" (.tres, .res), "all" (everything)'),
     }),
     execute: async ({ type }): Promise<string> => {
       const godot = getGodotConnection();

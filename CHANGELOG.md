@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 1.0.9 - 2025-12-19
+
+### Changed
+- Removed unused `websocket` dependency (eliminates deprecated `yaeti` install warning)
+
 ## 1.0.8 - 2025-12-19
 
 ### Changed

@@ -1,6 +1,6 @@
 {
   "name": "godot-mcp-cli",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "CLI and MCP server for AI assistants to interact with Godot Engine",
   "type": "module",
   "main": "dist/index.js",
@@ -48,7 +48,7 @@
     "fastmcp": "^3.25.4",
     "websocket": "^1.0.35",
     "ws": "^8.13.0",
-    "zod": "^3.21.4"
+    "zod": "4.1.13"
   },
   "devDependencies": {
     "@types/node": "^20.3.1",

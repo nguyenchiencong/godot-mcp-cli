@@ -165,7 +165,7 @@ export const sceneTools: MCPTool[] = [
         .describe('Type of resource to create (e.g. "ImageTexture", "AudioStreamMP3", "StyleBoxFlat")'),
       resource_path: z.string()
         .describe('Path where the resource will be saved (e.g. "res://resources/style.tres")'),
-      properties: z.record(z.any()).optional()
+      properties: z.record(z.string(), z.any()).optional()
         .describe('Dictionary of property values to set on the resource'),
     }),
     execute: async ({ resource_type, resource_path, properties = {} }: CreateResourceParams): Promise<string> => {

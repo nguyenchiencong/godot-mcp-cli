@@ -39,6 +39,7 @@ type ToolSummary = {
         description?: string;
       }
     >;
+    required?: string[];
   };
 };
 
@@ -65,10 +66,19 @@ function toToolSummary(tool: Record<string, unknown>): ToolSummary {
       ? (rawProps as Record<string, { type?: string; description?: string }>)
       : undefined;
 
+  const rawRequired =
+    typeof (tool as { inputSchema?: { required?: unknown } }).inputSchema === 'object'
+      ? (tool as { inputSchema?: { required?: unknown } }).inputSchema?.required
+      : undefined;
+
+  const required = Array.isArray(rawRequired)
+    ? rawRequired.filter((value): value is string => typeof value === 'string')
+    : undefined;
+
   return {
     name,
     description: typeof tool.description === 'string' ? tool.description : undefined,
-    inputSchema: properties ? { properties } : undefined,
+    inputSchema: properties || required ? { properties, required } : undefined,
   };
 }
 
@@ -169,7 +179,12 @@ function parseArgs(argv: string[]): ParsedArgs {
           process.exit(1);
         }
         try {
-          paramsJson = JSON.parse(next);
+          const parsedJson = JSON.parse(next) as unknown;
+          if (!parsedJson || typeof parsedJson !== 'object' || Array.isArray(parsedJson)) {
+            console.error('--params-json must be a JSON object');
+            process.exit(1);
+          }
+          paramsJson = parsedJson as Record<string, unknown>;
         } catch (error) {
           console.error(`Invalid JSON for --params-json: ${(error as Error).message}`);
           process.exit(1);
@@ -245,9 +260,21 @@ async function copyAddon(targetProjectPath: string): Promise<void> {
     throw new Error(`Not a Godot project (project.godot not found at ${projectPath})`);
   }
 
-  const sourceAddon = path.resolve(__dirname, '..', 'addons', 'godot_mcp');
-  if (!(await pathExists(sourceAddon))) {
-    throw new Error(`Source addon not found at ${sourceAddon}`);
+  const addonCandidates = [
+    path.resolve(__dirname, '..', 'addons', 'godot_mcp'),
+    path.resolve(__dirname, '..', '..', 'addons', 'godot_mcp'),
+  ];
+
+  let sourceAddon: string | undefined;
+  for (const candidate of addonCandidates) {
+    if (await pathExists(candidate)) {
+      sourceAddon = candidate;
+      break;
+    }
+  }
+
+  if (!sourceAddon) {
+    throw new Error(`Source addon not found. Tried: ${addonCandidates.join(', ')}`);
   }
 
   const targetAddonDir = path.join(projectPath, 'addons', 'godot_mcp');
@@ -449,6 +476,19 @@ async function main(): Promise<void> {
     }
 
     const argumentsPayload = parsed.paramsJson ?? parsed.params;
+
+    const requiredParams = target.inputSchema?.required ?? [];
+    if (requiredParams.length > 0) {
+      const missing = requiredParams.filter(
+        key =>
+          !Object.prototype.hasOwnProperty.call(argumentsPayload, key) ||
+          argumentsPayload[key] === undefined
+      );
+      if (missing.length > 0) {
+        const label = missing.length === 1 ? 'parameter' : 'parameters';
+        throw new Error(`Invalid parameters: missing required ${label}: ${missing.join(', ')}`);
+      }
+    }
 
     const result = await client.callTool(
       {

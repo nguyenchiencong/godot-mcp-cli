@@ -16,8 +16,8 @@ cd server && npm run build && npm link
 - List tools: `godot-mcp --list-tools`
 - Tool help: `godot-mcp --help get_debug_output`
 - Call with flags: `godot-mcp get_debug_output`
-- Call with params: `godot-mcp debugger_set_breakpoint --script_path res://test_debugger.gd --line 42`
-- Call with JSON params: `godot-mcp debugger_resume_execution --params-json '{"session_id":"default"}' --raw`
+- Call with params: `godot-mcp debugger_set_breakpoint --script-path res://test_debugger.gd --line 42`
+- Call with JSON params (must be a JSON object): `godot-mcp get_stack_frames_panel --params-json '{"session_id":1}' --raw`
 - Install/update addon into a Godot project: `godot-mcp install-addon "path/to/project"`
 - Reload operations:
   - `godot-mcp rescan_filesystem` - detect external file changes

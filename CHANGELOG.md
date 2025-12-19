@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+## 1.0.8 - 2025-12-19
+
+### Changed
+- **Dependency Upgrade**: Upgraded `zod` from 3.24.2 to 4.1.13
+- Updated `create_resource` schema to use the Zod 4-required `z.record(keySchema, valueSchema)` form
+
+### Fixed
+- CLI now reports a stable, friendly error for missing required tool parameters (instead of relying on upstream validation wording)
+- `install-addon` can now locate the bundled addon folder in both dev and published package layouts
+
 ## 1.0.7 - 2025-12-11
 
 ### Added

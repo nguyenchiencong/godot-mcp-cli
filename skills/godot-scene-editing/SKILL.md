@@ -76,3 +76,4 @@ Capture returns a PNG image plus a text summary. Without `--scene-path`, the sce
 - `create_resource --resource-type "StyleBoxFlat" --resource-path "res://ui/button_style.tres" --properties '{"bg_color":"#2f6fff"}'`: create reusable resources (styles, materials, curves).
 - `validate_scene` issues use severity/category/message with categories `load`, `instantiate`, `duplicate_name`, `missing_resource`, and `cyclic_dependency`. Pass `--check-instantiate false` to skip the slower tree-build check.
 - `list_nodes --parent-path "./UI"`: list direct children only.
+- Multi-step edits (up to 25 tool calls in order): `batch_operations` with `--operations '[{"tool":"create_node","arguments":{...}}]'`. `--dry-run` validates schemas only; execution is non-atomic with no rollback — any failed or invalid operation fails the call with the embedded report.

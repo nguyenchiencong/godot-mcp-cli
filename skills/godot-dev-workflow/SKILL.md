@@ -63,8 +63,10 @@ For every change, walk the loop: inspect, edit, run, verify, fix, refresh.
 | Find a bug | godot-debugging | `debugger_enable_events`, `debugger_set_breakpoint` |
 | Read runtime errors | godot-debugging | `get_debug_output`, `get_editor_errors` |
 | Test controls | godot-input-testing | `get_input_actions`, `simulate_action_tap` |
+| Automate a play-test with runtime assertions | godot-input-testing | `playtest` (input phases + assertions; `capture_on_failure`) |
 | First-time setup or connection issues | godot-mcp-quickstart | `get_project_info` |
-| Batch editor automation | godot-scripting | `execute_editor_script` |
+| Run several tool calls as one ordered job | godot-scene-editing | `batch_operations` (`dry_run` validates first; non-atomic) |
+| One-off editor automation the dedicated tools lack | godot-scripting | `execute_editor_script --allow-unsafe true` |
 | See what the game looks like now | godot-scene-editing | `capture_scene` |
 
 ## Running modes

@@ -66,6 +66,8 @@ godot-mcp get_debug_output
 godot-mcp get_runtime_scene_structure --max-depth 2
 ```
 
+For scripted end-to-end checks, `playtest` composes launch (or attach), input phases, runtime node/expression assertions, and optional failure capture in one call. Unavailable or truncated runtime snapshots are reported as infrastructure errors, never silent passes; mutation commands (input simulation included) run one at a time in submission order.
+
 ## Advanced features
 
 - `simulate_action_press --action "ui_right" --strength 0.5`: analog-style strength for actions read via `Input.get_action_strength`.

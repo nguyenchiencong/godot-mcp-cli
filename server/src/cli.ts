@@ -179,6 +179,10 @@ function parseArgs(argv: string[]): ParsedArgs {
           process.exit(1);
         }
         timeoutMs = Number(next);
+        if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || !Number.isInteger(timeoutMs)) {
+          console.error('--timeout must be a positive integer in milliseconds');
+          process.exit(1);
+        }
         i += 1;
         break;
       case 'params-json':
@@ -375,27 +379,33 @@ async function connectClient(
     capabilities: {},
   });
 
-  let timedOut = false;
-  const timeout = timeoutMs
-    ? setTimeout(() => {
-        timedOut = true;
-        void transport.close();
-      }, timeoutMs)
-    : undefined;
+  let connectionTimer: NodeJS.Timeout | undefined;
+  let connectionTimedOut = false;
+  const connectPromise = client.connect(transport);
+  const deadline = timeoutMs === undefined
+    ? connectPromise
+    : Promise.race([
+        connectPromise,
+        new Promise<never>((_, reject) => {
+          connectionTimer = setTimeout(() => {
+            connectionTimedOut = true;
+            void transport.close();
+            reject(new Error(`Connection timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        }),
+      ]);
 
-  await client.connect(transport);
+  try {
+    await deadline;
+  } finally {
+    if (connectionTimer) clearTimeout(connectionTimer);
+  }
+  if (connectionTimedOut) throw new Error(`Connection timed out after ${timeoutMs}ms`);
 
   const cleanup = async () => {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-    await client.close();
-    await transport.close();
+    await client.close().catch(() => undefined);
+    await transport.close().catch(() => undefined);
   };
-
-  if (timedOut) {
-    throw new Error('Connection to MCP server timed out');
-  }
 
   return { client, cleanup };
 }
@@ -561,15 +571,11 @@ async function main(): Promise<void> {
       }
     }
 
-    const result = await client.callTool(
-      {
-        name: parsed.toolName as string,
-        arguments: argumentsPayload,
-      },
-      undefined,
-      parsed.verbose
+    const requestOptions = {
+      ...(parsed.timeoutMs === undefined ? {} : { timeout: parsed.timeoutMs }),
+      ...(parsed.verbose
         ? {
-            onprogress: progress => {
+            onprogress: (progress: { progress: number; total?: number }) => {
               const progressText =
                 progress.total !== undefined
                   ? `progress ${progress.progress}/${progress.total}`
@@ -577,7 +583,15 @@ async function main(): Promise<void> {
               console.error(`[progress] ${parsed.toolName}: ${progressText}`);
             },
           }
-        : undefined
+        : {}),
+    };
+    const result = await client.callTool(
+      {
+        name: parsed.toolName as string,
+        arguments: argumentsPayload,
+      },
+      undefined,
+      requestOptions
     );
 
     printContent(result, parsed.raw);

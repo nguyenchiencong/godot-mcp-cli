@@ -12,6 +12,8 @@ import { inputTools } from './tools/input_tools.js';
 import { captureTools } from './tools/capture_tools.js';
 import { diagnosticsTools } from './tools/diagnostics_tools.js';
 import { shaderTools } from './tools/shader_tools.js';
+import { createBatchTool } from './tools/batch_tools.js';
+import { createPlaytestTool } from './tools/playtest_tools.js';
 import { getGodotConnection } from './utils/godot_connection.js';
 
 // Import resources
@@ -71,11 +73,14 @@ async function main() {
     ...diagnosticsTools,
     ...shaderTools
   ];
+  const batchTool = createBatchTool(allTools);
+  const playtestTool = createPlaytestTool();
+  const registeredTools = [...allTools, batchTool, playtestTool];
 
-  allTools.forEach(tool => {
+  registeredTools.forEach(tool => {
     server.addTool(tool);
   });
-  console.error(`Registered ${allTools.length} tools`);
+  console.error(`Registered ${registeredTools.length} tools`);
 
   // Register all resources
   server.addResource(sceneListResource);
@@ -110,10 +115,9 @@ async function main() {
     }
   );
 
-  // Start the server
-
-  // Start with stdio transport
-  server.start({
+  // Start with stdio transport. FastMCP startup is asynchronous; await it so
+  // startup failures reach the outer catch instead of leaving a half-live pipe.
+  await server.start({
     transportType: 'stdio',
   });
 
@@ -130,16 +134,25 @@ async function main() {
   console.error('Enhanced Godot MCP server started');
   console.error('Ready to process commands from Claude or other AI assistants');
 
-  // Handle cleanup
-  const cleanup = () => {
+  // Handle cleanup exactly once. Do not write protocol diagnostics to stdout.
+  let shuttingDown = false;
+  const cleanup = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.error('Shutting down Enhanced Godot MCP server...');
-    const godot = getGodotConnection();
-    godot.disconnect();
-    process.exit(0);
+    getGodotConnection().disconnect();
+    try {
+      await server.stop();
+    } catch (error) {
+      console.error('FastMCP shutdown failed:', error);
+    }
   };
 
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
+  const handleSignal = () => {
+    void cleanup().then(() => process.exit(0));
+  };
+  process.on('SIGINT', handleSignal);
+  process.on('SIGTERM', handleSignal);
 }
 
 // Start the server

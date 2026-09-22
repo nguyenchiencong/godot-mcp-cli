@@ -5,13 +5,17 @@ extends MCPBaseCommandProcessor
 const EXECUTION_TIMEOUT_SECONDS := 1.5
 const MAX_LOG_TAIL_CHARS := 2048
 const MAX_LOG_TAIL_LINES := 20
+const MAX_OUTPUT_LINES := 200
+const MAX_OUTPUT_CHARS := 64 * 1024
 
 var _pending_executions := {}
 
 func process_command(client_id: int, command_type: String, params: Dictionary, command_id: String) -> bool:
 	match command_type:
 		"execute_editor_script":
-			_execute_editor_script(client_id, params, command_id)
+			# Await so dispatch resolves only after execution_completed or the
+			# deadline timer fires; each path sends exactly one response.
+			await _execute_editor_script(client_id, params, command_id)
 			return true
 	return false  # Command not handled
 
@@ -32,6 +36,8 @@ func _fix_api_compatibility(code: String) -> String:
 	return modified_code
 
 func _execute_editor_script(client_id: int, params: Dictionary, command_id: String) -> void:
+	if params.get("allow_unsafe", false) != true:
+		return _send_error(client_id, "execute_editor_script requires allow_unsafe: true; code runs on the editor main thread with filesystem access", command_id)
 	var code = params.get("code", "")
 	
 	# Validation
@@ -162,10 +168,22 @@ func _execute_code():
 	_track_pending_execution(script_node, client_id, command_id, execution_log_snapshot)
 	script_node.run()
 
+	# run() usually completes synchronously; if it did not (or user code
+	# suspended), wait until the completion signal or the deadline timer pops
+	# the pending entry. Both pop paths already sent the single response, so
+	# returning here keeps exactly one response per command.
+	while _pending_executions.has(script_node.get_instance_id()):
+		if not is_inside_tree():
+			break
+		await get_tree().process_frame
+
 
 # Signal handler for when script execution completes
 func _on_script_execution_completed(script_node: Node, client_id: int, command_id: String) -> void:
 	var pending = _pop_pending_execution(script_node)
+	if pending.is_empty():
+		# The deadline timer already responded and popped this entry.
+		return
 	var log_snapshot = pending.get("log_snapshot", {})
 	var log_tail = _extract_log_tail(log_snapshot)
 	
@@ -179,9 +197,20 @@ func _on_script_execution_completed(script_node: Node, client_id: int, command_i
 	script_node.queue_free()
 	
 	# Build the response
+	var output_lines: Array = []
+	var output_chars := 0
+	var output_truncated := false
+	for line in output:
+		if output_lines.size() >= MAX_OUTPUT_LINES or output_chars + str(line).length() > MAX_OUTPUT_CHARS:
+			output_truncated = true
+			continue
+		output_lines.append(str(line))
+		output_chars += str(line).length()
 	var result_data = {
 		"success": error_message.is_empty(),
-		"output": output
+		"output": output_lines,
+		"output_truncated": output_truncated,
+		"output_limits": {"max_lines": MAX_OUTPUT_LINES, "max_chars": MAX_OUTPUT_CHARS}
 	}
 
 	print("Editor script execution result: success=%s" % result_data["success"])
@@ -360,7 +389,7 @@ func _on_execution_timeout(execution_id: int, client_id: int, command_id: String
 			remove_child(script_node)
 		script_node.queue_free()
 	var log_tail = _extract_log_tail(pending.get("log_snapshot", {}))
-	var message = "Script execution timed out before completion."
+	var message = "Editor script response deadline exceeded; execution could not be proven stopped. Side effects may still occur because the editor main thread cannot be preempted safely."
 	if not log_tail.is_empty():
 		message += "\n" + "\n".join(log_tail)
 	_send_error(client_id, message, command_id)

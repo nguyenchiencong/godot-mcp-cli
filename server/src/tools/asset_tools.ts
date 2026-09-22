@@ -13,12 +13,14 @@ export const assetTools: MCPTool[] = [
     parameters: z.object({
       type: z.string()
         .describe('Type of assets to list. Valid types: "scripts" (.gd), "scenes" (.tscn), "images" (.png, .jpg, etc.), "audio" (.ogg, .mp3, .wav), "fonts" (.ttf, .otf), "models" (.glb, .gltf, .obj, .fbx), "shaders" (.gdshader), "resources" (.tres, .res), "all" (everything)'),
+      offset: z.number().int().min(0).optional().describe('Zero-based page offset (default 0).'),
+      limit: z.number().int().min(1).max(1000).optional().describe('Page size (default 200, maximum 1000).'),
     }),
-    execute: async ({ type }): Promise<string> => {
+    execute: async ({ type, offset, limit }): Promise<string> => {
       const godot = getGodotConnection();
       
       try {
-        const result = await godot.sendCommand('list_assets_by_type', { type });
+        const result = await godot.sendCommand('list_assets_by_type', { type, ...(offset === undefined ? {} : { offset }), ...(limit === undefined ? {} : { limit }) });
         
         if (result && typeof result === 'object' && result.error) {
           throw new Error(result.error);
@@ -34,8 +36,9 @@ export const assetTools: MCPTool[] = [
         
         const fileList = result.files.join('\n- ');
 
+        const page = result.truncated ? ` Page ${result.offset ?? 0}-${(result.offset ?? 0) + (result.returned_count ?? assetCount)} of ${result.total_count ?? '?'}. Request offset ${result.next_offset} for more.` : '';
         return [
-          `Found ${assetCount} ${assetType} assets in the project.`,
+          `Found ${assetCount} ${assetType} assets in this page.${page}`,
           '',
           'Assets:',
           `- ${fileList}`
@@ -52,24 +55,33 @@ export const assetTools: MCPTool[] = [
     parameters: z.object({
       extensions: z.array(z.string()).optional()
         .describe('File extensions to filter by (e.g. [".tscn", ".gd"])'),
+      offset: z.number().int().min(0).optional().describe('Zero-based page offset (default 0).'),
+      limit: z.number().int().min(1).max(1000).optional().describe('Page size (default 200, maximum 1000).'),
     }),
-    execute: async ({ extensions = [] }): Promise<string> => {
+    execute: async ({ extensions = [], offset, limit }): Promise<string> => {
       const godot = getGodotConnection();
       
       try {
-        const result = await godot.sendCommand('list_project_files', { extensions });
+        const result = await godot.sendCommand('list_project_files', { extensions, ...(offset === undefined ? {} : { offset }), ...(limit === undefined ? {} : { limit }) });
         
         const fileCount = result.files ? result.files.length : 0;
         const extensionStr = extensions.length > 0 ? extensions.join(', ') : 'all';
+        const scanWarning = result.scan_truncated
+          ? ` Warning: the project scan hit the ${100000}-entry cap; this page may be incomplete (scan_truncated).`
+          : '';
         
         if (fileCount === 0) {
-          return `No files with extensions ${extensionStr} found in the project.`;
+          if ((result.total_count ?? 0) > 0 && (result.returned_count ?? 0) === 0) {
+            return `Requested offset ${result.offset ?? offset ?? 0} is past the end: the scan found ${result.total_count} matching files but returned none at this offset. Use offset 0 or a smaller offset.${scanWarning}`;
+          }
+          return `No files with extensions ${extensionStr} found in the project.${scanWarning}`;
         }
         
         const fileList = result.files.join('\n- ');
 
+        const page = result.truncated ? ` Page ${result.offset ?? 0}-${(result.offset ?? 0) + (result.returned_count ?? fileCount)} of ${result.total_count ?? '?'}. Request offset ${result.next_offset} for more.` : '';
         return [
-          `Found ${fileCount} files with extensions ${extensionStr} in the project.`,
+          `Found ${fileCount} files with extensions ${extensionStr} in this page.${page}${scanWarning}`,
           '',
           'Files:',
           `- ${fileList}`

@@ -337,13 +337,19 @@ func _build_response(root: Dictionary, options: Dictionary) -> Dictionary:
 	var max_depth: int = options.get("max_depth", -1)
 	var include_props := options.get("include_properties", false)
 	var include_scripts := options.get("include_scripts", false)
+	# Marker records whether max_depth dropped any children so the response can
+	# report a partial tree (structure.truncated) additively.
+	var truncation_marker := { "truncated": false }
+	var structure := _project_node(root, 0, max_depth, truncation_marker)
+	if bool(truncation_marker.get("truncated", false)):
+		structure["truncated"] = true
 
 	var response := {
 		"scene_path": root.get("scene_file_path", ""),
 		"root_node_name": root.get("name", ""),
 		"root_node_type": root.get("type", ""),
 		"runtime": true,
-		"structure": _project_node(root, 0, max_depth)
+		"structure": structure
 	}
 
 	if include_props:
@@ -353,7 +359,7 @@ func _build_response(root: Dictionary, options: Dictionary) -> Dictionary:
 
 	return response
 
-func _project_node(node: Dictionary, depth: int, max_depth: int) -> Dictionary:
+func _project_node(node: Dictionary, depth: int, max_depth: int, truncation_marker: Dictionary) -> Dictionary:
 	var projected := {
 		"name": node.get("name", ""),
 		"type": node.get("type", ""),
@@ -365,10 +371,15 @@ func _project_node(node: Dictionary, depth: int, max_depth: int) -> Dictionary:
 	}
 
 	if max_depth >= 0 and depth >= max_depth:
+		# Children exist but were omitted by max_depth: flag this node and the
+		# root so callers can treat presence checks against a partial tree.
+		if not node["children"].is_empty():
+			projected["truncated"] = true
+			truncation_marker["truncated"] = true
 		return projected
 
 	for child in node["children"]:
-		projected["children"].append(_project_node(child, depth + 1, max_depth))
+		projected["children"].append(_project_node(child, depth + 1, max_depth, truncation_marker))
 
 	return projected
 

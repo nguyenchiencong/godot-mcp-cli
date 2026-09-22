@@ -2,6 +2,10 @@
 class_name MCPProjectCommands
 extends MCPBaseCommandProcessor
 
+const DEFAULT_PAGE_LIMIT := 200
+const MAX_PAGE_LIMIT := 1000
+const MAX_SCAN_ENTRIES := 100000
+
 func process_command(client_id: int, command_type: String, params: Dictionary, command_id: String) -> bool:
 	match command_type:
 		"get_project_info":
@@ -42,6 +46,10 @@ func process_command(client_id: int, command_type: String, params: Dictionary, c
 #   "extensions":   Array[String]; when non-empty, only files whose NAME ends with one
 #                   of these extensions are reported (empty = all files).
 #   "include_dirs": bool; when true, directories are reported too.
+#   "max_entries":  int; stop the whole walk once a further matching file appears
+#                   after this many counted files (0 = uncapped). The shared scan
+#                   counter is stored back into options["scan_counter"] so callers
+#                   can read "truncated" after the walk returns.
 # on_entry.call(entry_path, file_name, is_dir, extension) where entry_path is the full
 # "res://..." path ("res://dir/" for directories) and extension excludes the dot.
 # Returns false when dir_path could not be opened; failed subdirectory opens are skipped.
@@ -53,11 +61,22 @@ func _walk_project_tree(dir_path: String, on_entry: Callable, options: Dictionar
 	var skip_dirs: Array = options.get("skip_dirs", [])
 	var extensions: Array = options.get("extensions", [])
 	var include_dirs: bool = options.get("include_dirs", false)
+	var max_entries: int = int(options.get("max_entries", 0))
+	var scan_counter: Dictionary = {}
+	if max_entries > 0:
+		# Shared across recursion (same options dictionary) and readable by the
+		# caller after the top-level walk returns.
+		scan_counter = options.get("scan_counter", {})
+		if scan_counter.is_empty():
+			scan_counter = { "count": 0, "truncated": false }
+			options["scan_counter"] = scan_counter
 
 	dir.list_dir_begin()
 	var file_name = dir.get_next()
 
 	while file_name != "":
+		if max_entries > 0 and bool(scan_counter.get("truncated", false)):
+			break
 		if dir.current_is_dir():
 			if file_name in skip_dirs:
 				file_name = dir.get_next()
@@ -72,6 +91,13 @@ func _walk_project_tree(dir_path: String, on_entry: Callable, options: Dictionar
 					has_valid_extension = true
 					break
 			if has_valid_extension:
+				if max_entries > 0:
+					if int(scan_counter.get("count", 0)) >= max_entries:
+						# Cap reached and another matching file exists: stop the
+						# walk entirely (not just this appending) and surface it.
+						scan_counter["truncated"] = true
+						break
+					scan_counter["count"] = int(scan_counter.get("count", 0)) + 1
 				on_entry.call(dir_path + file_name, file_name, false, file_name.get_extension())
 
 		file_name = dir.get_next()
@@ -106,17 +132,33 @@ func _get_project_info(client_id: int, _params: Dictionary, command_id: String) 
 func _list_project_files(client_id: int, params: Dictionary, command_id: String) -> void:
 	var extensions = params.get("extensions", [])
 	var files = []
-	
-	# Get all files with the specified extensions
-	if not _walk_project_tree("res://", _on_project_file_entry.bind(files), {"extensions": extensions}):
+	var walk_options = {"extensions": extensions, "max_entries": MAX_SCAN_ENTRIES}
+	if not _walk_project_tree("res://", _on_project_file_entry.bind(files), walk_options):
 		return _send_error(client_id, "Failed to open res:// directory", command_id)
-	
-	_send_success(client_id, {
-		"files": files
-	}, command_id)
+	files.sort()
+	var scan_truncated = bool(walk_options.get("scan_counter", {}).get("truncated", false))
+	var page := _page_entries(files, params, scan_truncated)
+	_send_success(client_id, page, command_id)
 
 func _on_project_file_entry(entry_path: String, _file_name: String, _is_dir: bool, _extension: String, files: Array) -> void:
-	files.append(entry_path)
+	if files.size() < MAX_SCAN_ENTRIES:
+		files.append(entry_path)
+
+func _page_entries(entries: Array, params: Dictionary, scan_truncated: bool = false) -> Dictionary:
+	var offset := max(0, int(params.get("offset", 0)))
+	var limit := clamp(int(params.get("limit", DEFAULT_PAGE_LIMIT)), 1, MAX_PAGE_LIMIT)
+	var end := min(offset + limit, entries.size())
+	var page: Array = entries.slice(offset, end)
+	return {
+		"files": page,
+		"offset": offset,
+		"limit": limit,
+		"returned_count": page.size(),
+		"total_count": entries.size(),
+		"truncated": end < entries.size(),
+		"scan_truncated": scan_truncated,
+		"next_offset": end if end < entries.size() else null
+	}
 
 func _get_project_structure(client_id: int, params: Dictionary, command_id: String) -> void:
 	var structure = {
@@ -187,6 +229,18 @@ func _list_project_resources(client_id: int, params: Dictionary, command_id: Str
 	if not _walk_project_tree("res://", _on_resource_entry.bind(resources), {}):
 		return _send_error(client_id, "Failed to open res:// directory", command_id)
 	
+	# Resources are grouped for compatibility; each group is independently
+	# paged to avoid returning an unbounded inventory in one response.
+	var offset := max(0, int(params.get("offset", 0)))
+	var limit := clamp(int(params.get("limit", DEFAULT_PAGE_LIMIT)), 1, MAX_PAGE_LIMIT)
+	var paging := {}
+	for category in resources.keys():
+		var entries: Array = resources[category]
+		entries.sort()
+		var end := min(offset + limit, entries.size())
+		resources[category] = entries.slice(offset, end)
+		paging[category] = {"offset": offset, "limit": limit, "returned_count": resources[category].size(), "total_count": entries.size(), "truncated": end < entries.size(), "next_offset": end if end < entries.size() else null}
+	resources["pagination"] = paging
 	_send_success(client_id, resources, command_id)
 
 func _on_resource_entry(entry_path: String, file_name: String, _is_dir: bool, _extension: String, resources: Dictionary) -> void:

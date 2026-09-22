@@ -43,6 +43,8 @@ After installing, a skill is triggered by its `description` frontmatter. For exa
 ## Conventions used by all skills
 
 - Tool invocation: `godot-mcp <tool_name> --flag value`, e.g. `godot-mcp debugger_set_breakpoint --script-path res://player.gd --line 42`.
+- Safety and bounded workflows: `execute_editor_script` requires `allow_unsafe: true`; file/asset inventories use offset pagination (the scan reports `scan_truncated` when the 100000-entry cap is hit); `batch_operations` is ordered but non-atomic with schema-only `dry_run` and fails the tool call (with the compact report embedded) when a real batch has a failed/invalid operation; `playtest` reports unavailable or truncated runtime snapshots and unavailable runtime bridges as infrastructure errors; mutation commands run one at a time, so the next mutation waits for input sequences and editor scripts to finish.
+- Debug streaming: use `stream_debug_output` with `start`, cursor-based `read`, bounded `capture`, or `stop`; asynchronous frames remain off stdout.
 - Editor node paths use `./` prefixes (`./World/Enemy`); script and scene paths use `res://`; runtime paths use `/root/...`.
 - Debugger, input simulation, and runtime shader tools require the game running in debug mode (F5), not F6.
 - GDScript written through these tools must use Python-style conditionals (`a if cond else b`), never the C-style ternary; no emoji anywhere.

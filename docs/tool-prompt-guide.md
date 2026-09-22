@@ -82,7 +82,7 @@ Use this document to craft effective prompts when instructing an LLM to interact
 
 | Tool | Purpose | Parameters | Example Prompt |
 |------|---------|------------|----------------|
-| `execute_editor_script` | Run arbitrary GDScript inside the editor context. | `code` (string) | "Find all nodes in the `Enemies` group and print their names." |
+| `execute_editor_script` | Run arbitrary GDScript inside the editor context; explicit unsafe opt-in is required and a deadline cannot preempt blocked main-thread code. | `code` (string), `allow_unsafe=true` | "With `allow_unsafe=true`, find all nodes in the `Enemies` group and print their names." |
 | `get_node_warnings` | Inspect the current scene for node configuration warnings. | `debug` (optional bool) | "Include traversal stats." |
 
 ---
@@ -91,8 +91,8 @@ Use this document to craft effective prompts when instructing an LLM to interact
 
 | Tool | Purpose | Parameters | Example Prompt |
 |------|---------|------------|----------------|
-| `list_assets_by_type` | Enumerate assets filtered by type. | `type` (string; `scripts`, `scenes`, `images`, `audio`, `fonts`, `models`, `shaders`, `resources`, `all`) | "List all `scripts` in the project." |
-| `list_project_files` | List project files matching specific extensions. | `extensions` (optional array of strings) | “Show all `.tscn` and `.gd` files.” |
+| `list_assets_by_type` | Enumerate a bounded page of assets filtered by type. | `type` plus `offset`/`limit` (default 200, max 1000) | "List the next page of `scripts` using the returned `next_offset`." |
+| `list_project_files` | List a bounded page of project files matching extensions. | `extensions`, `offset`, `limit` | “Show the first page of `.tscn` and `.gd` files, then follow `next_offset`.” |
 
 ---
 
@@ -110,7 +110,7 @@ Use this document to craft effective prompts when instructing an LLM to interact
 | `clear_debug_output` | Clear the Output panel and reset the streaming baseline before a new capture. | _none_ | "Clear the Output panel so the next debug stream only shows fresh lines." |
 | `clear_editor_errors` | Clear the Errors tab in the debugger panel to remove accumulated warnings and errors. | _none_ | "Clear the Errors tab so I can verify no new errors appear during the next test run." |
 | `update_node_transform` | Adjust a node's transform (position/rotation/scale). | `node_path` (string), `position` (optional array), `rotation` (optional number), `scale` (optional array) | "Move `./Camera` to `[512, 256]` and set rotation to `0.5`." |
-| `stream_debug_output` | Start (`action="start"`) or stop (`"stop"`) live streaming of the editor Output panel (lines arrive as `[Godot Debug] ...`). | `action` (optional string, `"start"` or `"stop"`) | "Subscribe to the debug stream so new Output lines appear live; I'll stop it afterwards." |
+| `stream_debug_output` | Read bounded protocol-safe Output frames. Use `start`, cursor-based `read`, bounded `capture`, or `stop`; frames never print asynchronously to stdout. | `action`, `after_cursor`, `duration_ms` | "Capture 1.5 seconds of debug output and return the next cursor." |
 
 ---
 
@@ -130,6 +130,15 @@ Use this document to craft effective prompts when instructing an LLM to interact
 | `debugger_step_into` | Step into the current function call to debug inside it. | _none_ | "Step into the function to see what happens inside." |
 | `debugger_get_call_stack` | Get the current call stack information (requires paused execution). | `session_id` (optional number) | "Show me the call stack when the debugger is paused." |
 | `debugger_get_current_state` | Get current debugger state and session information. | _none_ | "Check the current debugger state and see if we have active sessions." |
+
+---
+
+## Batch and Playtest Workflows
+
+| Tool | Purpose | Parameters | Example Prompt |
+|------|---------|------------|----------------|
+| `batch_operations` | Run up to 25 existing tools in order; `dry_run` validates schemas only. It is non-atomic and has no rollback. Outside dry run, any failed/invalid operation fails the tool call with the compact report embedded in the error. | `operations` (JSON), `dry_run`, `continue_on_error` | "Dry-run these ordered operations, then execute only after I review the valid entries." |
+| `playtest` | Launch or attach to a debug game, apply bounded input phases, and assert runtime state; unavailable/errored/truncated runtime snapshots and eval bridges are infrastructure errors, and a cleanup failure fails the run. | `launch`, `phases`, `stop_after`, `capture_on_failure` | "Run this phase, assert the Player exists, and capture on failure." |
 
 ---
 

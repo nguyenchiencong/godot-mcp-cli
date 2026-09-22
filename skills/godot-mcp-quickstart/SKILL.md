@@ -55,7 +55,7 @@ Work through in order when a call fails or reports "godot not responding":
 
 1. Is the Godot editor open with the project loaded? The CLI talks to the editor over WebSocket; nothing works without it.
 2. Is the "Godot MCP" plugin enabled (Project > Project Settings > Plugins)? The WebSocket server only starts when the plugin is active.
-3. Is port 9080 free and reachable? The plugin listens on localhost:9080; check the Godot MCP panel in the editor and make sure the firewall is not blocking localhost.
+3. Is port 9080 free and reachable? The plugin listens on localhost:9080 by default; check the Godot MCP panel in the editor and make sure the firewall is not blocking localhost. If 9080 is already occupied (for example by another editor), set `GODOT_MCP_PORT` (1024-65535) for both the editor and the godot-mcp server/CLI process (both honor it) before launching; the client then connects on that port automatically.
 4. Was the addon installed into the right project? The CLI connects to whatever project is currently open in the editor.
 5. Is the timeout long enough? Slow machines can exceed the default; raise it with `--timeout 10000`.
 6. Retry with diagnostics to see the failure reason: `godot-mcp get_project_info --verbose`.

@@ -17,10 +17,13 @@
     "start": "node dist/index.js",
     "dev": "nodemon --watch src --exec \"tsc && node dist/index.js\"",
     "test": "node tests/tools.test.js --skip-runtime",
+    "test:offline": "node tests/debug_output_buffer.test.js && node tests/batch_tools.test.js && node tests/playtest_tools.test.js",
     "test:all": "node tests/tools.test.js",
     "test:cli": "node tests/cli.test.js",
     "test:connection": "node tests/godot_connection.test.js",
     "test:async-diagnostics": "node tests/async_diagnostics.test.js",
+    "benchmark:transport": "node benchmarks/transport.bench.js",
+    "benchmark:live": "node benchmarks/live_editor.bench.js",
     "prepublishOnly": "npm run build && node -e \"require('fs').cpSync('../addons/godot_mcp','./addons/godot_mcp',{recursive:true});require('fs').cpSync('../README.md','./README.md');require('fs').cpSync('../skills','./skills',{recursive:true})\"",
     "postpublish": "node -e \"require('fs').rmSync('./addons',{recursive:true,force:true});require('fs').rmSync('./README.md',{force:true});require('fs').rmSync('./skills',{recursive:true,force:true})\""
   },

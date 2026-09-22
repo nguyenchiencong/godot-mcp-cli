@@ -28,12 +28,12 @@ A Command Line Interface (CLI) for AI assistants to interact with Godot Engine, 
 - **Scene Operations**: Create, delete, open, and save scenes; query project info and current scene state
 - **Visual Scene Feedback**: Render any scene into an off-screen viewport with `capture_scene` and receive the PNG image directly, so vision-capable models can see the scene
 - **Scene Validation**: Check structural health of .tscn scenes (duplicate node names, missing scripts/resources, cyclic dependencies) with `validate_scene`
-- **Asset Management**: List assets by type and enumerate project files
+- **Asset Management**: List assets by type and enumerate project files with bounded offset pagination
 - **Project Reload**: Restart editor, reload scenes, or rescan filesystem for external changes
 - **Project Guidance**: Scan the project and generate `res://addons/godot_mcp/ai/project_guide.md` (and optionally `AGENTS.md`) with `generate_project_guidance`
-- **Debug Output Access**: Snapshot logs with `get_debug_output` or tail them live via `stream_debug_output`
+- **Debug Output Access**: Snapshot logs with `get_debug_output` or read bounded cursor-based output via `stream_debug_output` without corrupting MCP stdout
 - **Stack Trace Capture**: Pull the editor's Stack Trace text or grab structured frames via `get_stack_trace_panel` / `get_stack_frames_panel`
-- **Editor Automation**: Execute GDScript in editor context via `execute_editor_script`
+- **Editor Automation**: Execute explicitly opted-in GDScript in editor context via `execute_editor_script` (`allow_unsafe: true`)
 
 ### **Debugger Integration**
 - **Breakpoint Management**: Set, remove, and list breakpoints across scripts with `debugger_set_breakpoint`
@@ -49,6 +49,7 @@ A Command Line Interface (CLI) for AI assistants to interact with Godot Engine, 
 - **Mouse Control**: Click, move, and drag operations (`simulate_mouse_click`, `simulate_drag`)
 - **Keyboard Input**: Simulate key presses with modifier support (`simulate_key_press`)
 - **Input Sequences**: Execute complex input combos with precise timing (`simulate_input_sequence`)
+- **Ordered Workflows**: Run bounded non-atomic `batch_operations` and automated `playtest` assertions over existing runtime tools
 - **Action Discovery**: List all available input actions in the project (`get_input_actions`)
 
 ## Installation
@@ -110,6 +111,8 @@ See [skills/README.md](skills/README.md) for the full skill guide.
 1. Open your project in Godot
 2. Go to Project > Project Settings > Plugins
 3. Enable the "Godot MCP" plugin
+
+The plugin listens on `ws://127.0.0.1:9080` by default. To use a different port (for example when 9080 is already taken), set the `GODOT_MCP_PORT` environment variable (integer 1024-65535) on the Godot editor process before launching it. The `godot-mcp` server/CLI resolves the same variable, so set it for both processes (or in a shared environment) when you move the port.
 
 ## Using the CLI (Recommended)
 

@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { getGodotConnection } from '../utils/godot_connection.js';
 import { MCPTool } from '../utils/types.js';
+import { DebugOutputBuffer } from '../utils/debug_output_buffer.js';
 
 /**
  * Enhanced tools for more complex operations in Godot
@@ -10,6 +11,7 @@ import { MCPTool } from '../utils/types.js';
 // Constants
 const MAX_FRAMES_DISPLAY = 10;
 const DEFAULT_INDENT_SIZE = 2;
+const debugOutputBuffer = new DebugOutputBuffer();
 
 // Type Definitions
 interface SceneNode {
@@ -568,45 +570,39 @@ export const enhancedTools: MCPTool[] = [
   },
   {
     name: 'stream_debug_output',
-    description: 'Subscribe or unsubscribe from live streaming of the editor Output panel.',
+    description: 'Read bounded debug Output streaming without writing asynchronous frames to stdout. start/stop subscriptions remain compatible; capture is convenient for one-shot CLI calls and read uses cursors for persistent sessions.',
     parameters: z.object({
-      action: z.enum(['start', 'stop']).default('start')
-        .describe('Choose "start" to begin streaming or "stop" to unsubscribe.')
+      action: z.enum(['start', 'read', 'capture', 'stop']).default('start'),
+      after_cursor: z.number().int().min(0).optional(),
+      duration_ms: z.number().int().min(0).max(30000).optional().default(1000),
     }),
-    execute: async ({ action }): Promise<string> => {
+    execute: async ({ action, after_cursor, duration_ms }): Promise<string> => {
       const godot = getGodotConnection();
-
       if (!debugOutputListenerAttached) {
         debugOutputListenerAttached = true;
-        godot.on('debug_output_frame', frame => {
-          try {
-            const frameData = frame as Record<string, unknown>;
-            const lines = safeGetStringArray(frameData.lines);
-            const chunk = typeof frameData.chunk === 'string' ? frameData.chunk : '';
-
-            if (frameData.reset) {
-              console.log('\n[Godot Debug] Log reset.');
-            }
-            if (lines.length > 0) {
-              for (const line of lines) {
-                console.log(`[Godot Debug] ${line}`);
-              }
-            } else if (chunk.length > 0) {
-              console.log(`[Godot Debug] ${chunk}`);
-            }
-          } catch (err) {
-            console.error('Failed to print debug frame:', err);
-          }
-        });
+        godot.on('debug_output_frame', frame => debugOutputBuffer.appendFrame(frame));
       }
-
       if (action === 'start') {
+        debugOutputBuffer.clear();
         await godot.sendCommand('subscribe_debug_output', {});
-        return 'Subscribed to live debug output. New log lines will appear in the console.';
+        return JSON.stringify({ subscribed: true, next_cursor: debugOutputBuffer.snapshot().next_cursor, truncated: false });
       }
-
-      await godot.sendCommand('unsubscribe_debug_output', {});
-      return 'Unsubscribed from live debug output.';
+      if (action === 'capture') {
+        debugOutputBuffer.clear();
+        await godot.sendCommand('subscribe_debug_output', {});
+        try {
+          await new Promise(resolve => setTimeout(resolve, duration_ms ?? 1000));
+        } finally {
+          // Always unsubscribe, even if the capture wait is interrupted.
+          await godot.sendCommand('unsubscribe_debug_output', {});
+        }
+        return JSON.stringify({ subscribed: false, ...debugOutputBuffer.snapshot() });
+      }
+      if (action === 'stop') {
+        await godot.sendCommand('unsubscribe_debug_output', {});
+        return JSON.stringify({ subscribed: false, ...debugOutputBuffer.read(after_cursor) });
+      }
+      return JSON.stringify(debugOutputBuffer.read(after_cursor));
     },
   },
   {

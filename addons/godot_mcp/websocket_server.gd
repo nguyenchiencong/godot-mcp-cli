@@ -11,8 +11,16 @@ var peers = {}
 var _port = 9080
 var _next_client_id: int = 1
 var _to_remove: Array = []
+const MAX_MESSAGE_BYTES := 8 * 1024 * 1024
+const MAX_QUEUED_PACKETS := 256
+const MAX_PACKETS_PER_PEER_PER_FRAME := 16
+var _disconnect_emitted := {}
 
 func _ready():
+	# GODOT_MCP_PORT (1024-65535, fallback 9080) lets a dedicated fixture editor pick a free port.
+	var env_port := OS.get_environment("GODOT_MCP_PORT").strip_edges()
+	if env_port.is_valid_int() and int(env_port) >= 1024 and int(env_port) <= 65535:
+		_port = int(env_port)
 	set_process(false)
 
 func _process(_delta):
@@ -36,17 +44,18 @@ func start_server() -> int:
 	return err
 
 func stop_server() -> void:
+	# Emit disconnect before clearing peers so subscribers and queued work can
+	# release client-owned state. The closed-state poll is guarded against a
+	# second emission.
+	for client_id in peers.keys():
+		_emit_client_disconnected(client_id)
+		if peers[client_id] != null:
+			peers[client_id].close()
+	peers.clear()
 	if is_server_active():
-		# Close all client connections properly
-		for client_id in peers.keys():
-			if peers[client_id] != null:
-				peers[client_id].close()
-		peers.clear()
-		
-		# Stop TCP server
 		tcp_server.stop()
-		set_process(false)
-		print("MCP WebSocket server stopped")
+	set_process(false)
+	print("MCP WebSocket server stopped")
 
 func poll() -> void:
 	if not tcp_server.is_listening():
@@ -65,9 +74,9 @@ func poll() -> void:
 		var ws = WebSocketPeer.new()
 		
 		# Configure WebSocket peer
-		ws.inbound_buffer_size = 64 * 1024 * 1024  # 64MB buffer
-		ws.outbound_buffer_size = 64 * 1024 * 1024  # 64MB buffer
-		ws.max_queued_packets = 4096
+		ws.inbound_buffer_size = MAX_MESSAGE_BYTES
+		ws.outbound_buffer_size = MAX_MESSAGE_BYTES
+		ws.max_queued_packets = MAX_QUEUED_PACKETS
 		
 		# Accept the stream
 		var err = ws.accept_stream(tcp)
@@ -96,10 +105,13 @@ func poll() -> void:
 		
 		match state:
 			WebSocketPeer.STATE_OPEN:
-				# Process any available packets
-				while peer.get_available_packet_count() > 0:
+				# Bound work per editor frame. WebSocketPeer retains packets for the
+				# next frame, preventing a burst from monopolizing the editor.
+				var packets_processed := 0
+				while peer.get_available_packet_count() > 0 and packets_processed < MAX_PACKETS_PER_PEER_PER_FRAME:
 					var packet = peer.get_packet()
 					_handle_packet(client_id, packet)
+					packets_processed += 1
 					
 			WebSocketPeer.STATE_CONNECTING:
 				pass
@@ -113,7 +125,7 @@ func poll() -> void:
 					peer.get_close_code(),
 					peer.get_close_reason()
 				])
-				emit_signal("client_disconnected", client_id)
+				_emit_client_disconnected(client_id)
 				_to_remove.append(client_id)
 	
 	# Remove disconnected clients
@@ -123,7 +135,16 @@ func poll() -> void:
 			peer.close()
 		peers.erase(client_id)
 
+func _emit_client_disconnected(client_id: int) -> void:
+	if _disconnect_emitted.has(client_id):
+		return
+	_disconnect_emitted[client_id] = true
+	emit_signal("client_disconnected", client_id)
+
 func _handle_packet(client_id: int, packet: PackedByteArray) -> void:
+	if packet.size() > MAX_MESSAGE_BYTES:
+		_send_protocol_error(client_id, "Message exceeds the %d byte limit" % MAX_MESSAGE_BYTES)
+		return
 	var text = packet.get_string_from_utf8()
 	var json = JSON.new()
 	var parse_result = json.parse(text)
@@ -151,6 +172,10 @@ func _handle_packet(client_id: int, packet: PackedByteArray) -> void:
 		print("Error parsing JSON from client %d: %s at line %d" % 
 			[client_id, json.get_error_message(), json.get_error_line()])
 
+func _send_protocol_error(client_id: int, message: String) -> void:
+	if peers.has(client_id):
+		send_response(client_id, {"status": "error", "message": message})
+
 func send_response(client_id: int, response: Dictionary) -> int:
 	if not peers.has(client_id):
 		print("Error: Client %d not found" % client_id)
@@ -166,6 +191,12 @@ func send_response(client_id: int, response: Dictionary) -> int:
 		return ERR_UNAVAILABLE
 	
 	var json_text = JSON.stringify(response)
+	if json_text.to_utf8_buffer().size() > MAX_MESSAGE_BYTES:
+		var command_id := str(response.get("commandId", ""))
+		var compact_error := {"status": "error", "message": "Response exceeds the %d byte limit; use file-based capture output" % MAX_MESSAGE_BYTES}
+		if not command_id.is_empty():
+			compact_error["commandId"] = command_id
+		json_text = JSON.stringify(compact_error)
 	var result = peer.send_text(json_text)
 	
 	if result != OK:
@@ -187,6 +218,8 @@ func send_event(client_id: int, event: Dictionary) -> int:
 		payload["event"] = "unknown"
 
 	var json_text = JSON.stringify(payload)
+	if json_text.to_utf8_buffer().size() > MAX_MESSAGE_BYTES:
+		return ERR_OUT_OF_MEMORY
 	return peer.send_text(json_text)
 
 func broadcast_event(event: Dictionary) -> void:

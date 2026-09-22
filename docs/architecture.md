@@ -25,8 +25,9 @@ Godot Engine APIs
 |------|---------|
 | `index.ts` | MCP server entry point |
 | `cli.ts` | Command-line interface |
-| `utils/godot_connection.ts` | WebSocket client to Godot |
-| `tools/*.ts` | MCP tool definitions |
+| `utils/godot_connection.ts` | Bounded WebSocket client to Godot (8 MiB messages, 64 pending commands, truthful response deadlines) |
+| `utils/debug_output_buffer.ts` | Bounded cursor-based debug stream buffer |
+| `tools/*.ts` | MCP tool definitions, including ordered `batch_operations` and bounded `playtest` orchestration |
 | `resources/*.ts` | MCP resource definitions |
 
 **Tool Categories:**
@@ -46,8 +47,8 @@ Godot Engine APIs
 | File | Purpose |
 |------|---------|
 | `mcp_server.gd` | Main plugin, manages lifecycle |
-| `websocket_server.gd` | WebSocket server on port 9080 |
-| `command_handler.gd` | Routes commands to processors |
+| `websocket_server.gd` | WebSocket server on port 9080 by default (`GODOT_MCP_PORT` override, 1024-65535) with finite message/packet buffers and per-frame packet budgeting |
+| `command_handler.gd` | Routes commands to processors; mutation admission is bounded FIFO and each dispatch is awaited, so the next mutation starts only after the current one (input sequences, editor scripts included) completes or hits its deadline, while read-only inspection remains concurrent |
 | `commands/*.gd` | Command processors by category |
 | `commands/capture_commands.gd` | Scene capture (`capture_scene`) |
 | `commands/validation_commands.gd` | Script diagnostics and scene validation |
@@ -171,4 +172,6 @@ Godot Input System
 
 - WebSocket accepts localhost connections only (default)
 - All commands validated before execution
-- Errors isolated from crashing the editor
+- Arbitrary editor scripts require explicit `allow_unsafe: true`
+- Batch execution is ordered but non-atomic and has no rollback
+- Command errors are returned to callers where possible; opted-in arbitrary editor code can still block or crash the editor

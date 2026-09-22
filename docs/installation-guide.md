@@ -39,7 +39,7 @@ Or manually copy `addons/godot_mcp` to your project's `addons` folder.
 2. Go to Project > Project Settings > Plugins
 3. Enable "Godot MCP"
 
-The WebSocket server starts automatically on port 9080.
+The WebSocket server starts automatically on port 9080. Set `GODOT_MCP_PORT` (integer 1024-65535) in the environment of both the editor and the `godot-mcp` server/CLI (both honor it) before launching to use a different port.
 
 ## Usage
 
@@ -121,7 +121,7 @@ The scene auto-triggers breakpoints every ~60 frames.
 ### Connection Issues
 
 - Verify WebSocket server is running (check Godot MCP panel)
-- Default port is 9080
+- Default port is 9080 (override with the `GODOT_MCP_PORT` environment variable, 1024-65535; the plugin and the server/CLI client both honor it)
 - Check firewall isn't blocking localhost
 
 ### Debugger Issues

@@ -5,6 +5,7 @@ import { formatNodeWarningsResult } from '../utils/node_warning_tools.js';
 
 interface ExecuteEditorScriptParams {
   code: string;
+  allow_unsafe: true;
 }
 
 interface ReloadProjectParams {
@@ -18,22 +19,30 @@ interface ReloadSceneParams {
 export const editorTools: MCPTool[] = [
   {
     name: 'execute_editor_script',
-    description: 'Executes arbitrary GDScript code in the Godot editor',
+    description: 'Executes arbitrary GDScript code with editor and project filesystem access on the editor main thread. Requires explicit allow_unsafe: true; response deadlines cannot preempt a blocked script.',
     parameters: z.object({
       code: z.string()
         .describe('GDScript code to execute in the editor context'),
+      allow_unsafe: z.literal(true)
+        .describe('Required explicit opt-in for arbitrary editor code.'),
     }),
-    execute: async ({ code }: ExecuteEditorScriptParams): Promise<string> => {
+    execute: async ({ code, allow_unsafe }: ExecuteEditorScriptParams): Promise<string> => {
       const godot = getGodotConnection();
       
       try {
-        const result = await godot.sendCommand('execute_editor_script', { code });
+        if (allow_unsafe !== true) {
+          throw new Error('execute_editor_script requires allow_unsafe: true');
+        }
+        const result = await godot.sendCommand('execute_editor_script', { code, allow_unsafe });
         
         // Format output for display
         let outputText = 'Script executed successfully';
         
         if (result.output && Array.isArray(result.output) && result.output.length > 0) {
-          outputText += '\n\nOutput:\n' + result.output.join('\n');
+          const lines = result.output.map(String);
+          const visible = lines.slice(0, 200);
+          outputText += '\n\nOutput:\n' + visible.join('\n');
+          if (lines.length > visible.length) outputText += `\n[output truncated: ${lines.length - visible.length} lines omitted]`;
         }
         
         if (result.result) {

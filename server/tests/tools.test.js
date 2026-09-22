@@ -186,6 +186,7 @@ const toolCategories = {
 						try {
 							const scriptPath = TEST_SCRIPT_PATH;
 							await tool.execute({
+								allow_unsafe: true,
 								code: `
 var dir = DirAccess.open("res://")
 if dir:
@@ -280,6 +281,7 @@ print("Cleaned up test script: ${scriptPath}")
 					if (tool) {
 						try {
 							await tool.execute({
+								allow_unsafe: true,
 								code: `
 var dir = DirAccess.open("res://")
 if dir:
@@ -695,6 +697,7 @@ print("Cleaned up test shader: ${TEST_SHADER_PATH}")
 						try {
 							const resourcePath = TEST_RESOURCE_PATH;
 							await tool.execute({
+								allow_unsafe: true,
 								code: `
 var dir = DirAccess.open("res://")
 if dir:
@@ -830,6 +833,7 @@ print("Cleaned up test resource: ${resourcePath}")
 					if (tool) {
 						try {
 							await tool.execute({
+								allow_unsafe: true,
 								code: `
 var ai_dir = DirAccess.open("res://addons/godot_mcp/ai")
 if ai_dir:
@@ -864,7 +868,7 @@ print("Cleaned up test project guide")
 		tests: [
 			{
 				tool: 'execute_editor_script',
-				params: { code: 'print("MCP Test")' },
+				params: { code: 'print("MCP Test")', allow_unsafe: true },
 				validate: (result) => result.includes('executed') || result.includes('success') || result.includes('Script')
 			},
 			{
@@ -1065,8 +1069,8 @@ print("Cleaned up test project guide")
 			},
 			{
 				tool: 'stream_debug_output',
-				params: { enabled: false },
-				validate: (result) => result.includes('Stream') || result.includes('stream') || result.includes('Output') || result.includes('output') || result.includes('unsubscribed')
+				params: { action: 'stop' },
+				validate: (result) => result.includes('Stream') || result.includes('stream') || result.includes('Output') || result.includes('output') || result.includes('unsubscribed') || result.includes('subscribed')
 			},
 			{
 				tool: 'get_runtime_scene_structure',
@@ -1277,6 +1281,7 @@ async function finalCleanup() {
 
 	try {
 		await tool.execute({
+			allow_unsafe: true,
 			code: `
 var dir = DirAccess.open("res://")
 if dir:

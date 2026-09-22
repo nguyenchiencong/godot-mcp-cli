@@ -5,6 +5,10 @@ import { EventEmitter } from 'events';
 // stringifying multi-MB payloads (base64 captures, full script sources) to stderr.
 const DEBUG_PAYLOADS = process.env.GODOT_MCP_DEBUG === '1';
 
+/** Conservative protocol bounds. Captures should use file-based transfer. */
+export const GODOT_MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
+export const GODOT_MAX_PENDING_COMMANDS = 64;
+
 export interface GodotResponse {
   status: 'success' | 'error';
   result?: any;
@@ -25,7 +29,7 @@ export class GodotConnection extends EventEmitter {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private intentionalClose = false;
   private connectionPromise: Promise<void> | null = null;
-  private commandQueue: Map<string, { 
+  private commandQueue: Map<string, {
     resolve: (value: any) => void;
     reject: (reason: any) => void;
     timeout: NodeJS.Timeout;
@@ -151,7 +155,7 @@ export class GodotConnection extends EventEmitter {
       const socket = new WebSocket(this.url, {
         perMessageDeflate: false,
         handshakeTimeout: 10000,
-        maxPayload: 64 * 1024 * 1024, // 64MB to match Godot
+        maxPayload: GODOT_MAX_MESSAGE_BYTES,
         followRedirects: true,
         skipUTF8Validation: true,
         headers: {
@@ -196,6 +200,10 @@ export class GodotConnection extends EventEmitter {
       socket.on('message', (data: Buffer) => {
         try {
           const raw = data.toString();
+          if (Buffer.byteLength(raw, 'utf8') > GODOT_MAX_MESSAGE_BYTES) {
+            console.error(`Ignoring oversized Godot response (${Buffer.byteLength(raw, 'utf8')} bytes)`);
+            return;
+          }
           const response: GodotResponse = JSON.parse(raw);
           const responseId = 'commandId' in response
             ? (response.commandId as string)
@@ -273,13 +281,23 @@ export class GodotConnection extends EventEmitter {
     }
 
     return new Promise<T>((resolve, reject) => {
+      if (this.commandQueue.size >= GODOT_MAX_PENDING_COMMANDS) {
+        reject(new Error(`Too many pending Godot commands (limit ${GODOT_MAX_PENDING_COMMANDS}); retry after existing requests complete`));
+        return;
+      }
       const commandId = `cmd_${this.commandId++}`;
       const command: GodotCommand = { type, params, commandId };
+      const data = JSON.stringify(command);
+      const payloadBytes = Buffer.byteLength(data, 'utf8');
+      if (payloadBytes > GODOT_MAX_MESSAGE_BYTES) {
+        reject(new Error(`Godot command ${type} is ${payloadBytes} bytes; maximum is ${GODOT_MAX_MESSAGE_BYTES} bytes`));
+        return;
+      }
 
       const timeoutId = setTimeout(() => {
         if (this.commandQueue.has(commandId)) {
           this.commandQueue.delete(commandId);
-          reject(new Error(`Command timed out: ${type}`));
+          reject(new Error(`Response deadline elapsed for ${type}; Godot work may still be running because cancellation is not supported`));
         }
       }, this.timeout);
 
@@ -290,12 +308,18 @@ export class GodotConnection extends EventEmitter {
       });
 
       if (this.ws?.readyState === WebSocket.OPEN) {
-        const data = JSON.stringify(command);
         if (DEBUG_PAYLOADS) {
           console.error('Sending command:', type);
           console.error('Payload:', data.slice(0, 1000) + (data.length > 1000 ? `... (${data.length} bytes)` : ''));
         }
-        this.ws.send(data);
+        this.ws.send(data, error => {
+          if (!error) return;
+          const pending = this.commandQueue.get(commandId);
+          if (!pending) return;
+          clearTimeout(pending.timeout);
+          this.commandQueue.delete(commandId);
+          pending.reject(new Error(`Failed to send Godot command ${type}: ${error.message}`));
+        });
       } else {
         clearTimeout(timeoutId);
         this.commandQueue.delete(commandId);
@@ -344,9 +368,20 @@ export class GodotConnection extends EventEmitter {
 
 let connectionInstance: GodotConnection | null = null;
 
+/**
+ * Mirrors the plugin-side GODOT_MCP_PORT override (websocket_server.gd):
+ * the client must dial the same port the editor listens on. Only plain
+ * digits in 1024-65535 are accepted; anything else falls back to 9080.
+ */
+export function resolveWebSocketUrl(host = '127.0.0.1'): string {
+  const raw = process.env.GODOT_MCP_PORT?.trim() ?? '';
+  const valid = /^\d+$/.test(raw) && Number(raw) >= 1024 && Number(raw) <= 65535;
+  return `ws://${host}:${valid ? Number(raw) : 9080}`;
+}
+
 export function getGodotConnection(): GodotConnection {
   if (!connectionInstance) {
-    connectionInstance = new GodotConnection();
+    connectionInstance = new GodotConnection(resolveWebSocketUrl());
   }
   return connectionInstance;
 }

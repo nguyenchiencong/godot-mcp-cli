@@ -30,7 +30,7 @@ import assert from 'node:assert';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import WebSocket, { WebSocketServer } from 'ws';
-import { GodotConnection } from '../dist/utils/godot_connection.js';
+import { GodotConnection, resolveWebSocketUrl } from '../dist/utils/godot_connection.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -607,6 +607,38 @@ async function main() {
       }
     }
   }
+}
+
+// GODOT_MCP_PORT resolver (offline): mirrors the plugin-side override rules
+// in websocket_server.gd — digits only, 1024-65535, fallback 9080.
+{
+  const original = process.env.GODOT_MCP_PORT;
+  const cases = [
+    [undefined, 'ws://127.0.0.1:9080'],
+    ['', 'ws://127.0.0.1:9080'],
+    ['   ', 'ws://127.0.0.1:9080'],
+    ['9080', 'ws://127.0.0.1:9080'],
+    ['5894', 'ws://127.0.0.1:5894'],
+    ['65535', 'ws://127.0.0.1:65535'],
+    ['1024', 'ws://127.0.0.1:1024'],
+    ['1023', 'ws://127.0.0.1:9080'],
+    ['70000', 'ws://127.0.0.1:9080'],
+    ['abc', 'ws://127.0.0.1:9080'],
+    ['12.5', 'ws://127.0.0.1:9080'],
+    ['0x1F90', 'ws://127.0.0.1:9080'],
+    ['-1', 'ws://127.0.0.1:9080'],
+  ];
+  for (const [value, expected] of cases) {
+    if (value === undefined) delete process.env.GODOT_MCP_PORT;
+    else process.env.GODOT_MCP_PORT = value;
+    const actual = resolveWebSocketUrl();
+    if (actual !== expected) {
+      throw new Error(`resolveWebSocketUrl with GODOT_MCP_PORT=${JSON.stringify(value)}: expected ${expected}, got ${actual}`);
+    }
+  }
+  if (original === undefined) delete process.env.GODOT_MCP_PORT;
+  else process.env.GODOT_MCP_PORT = original;
+  console.log('GODOT_MCP_PORT resolver tests passed');
 }
 
 main().catch((err) => {

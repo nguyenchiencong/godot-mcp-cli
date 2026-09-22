@@ -20,6 +20,42 @@ const ENHANCED_COMMANDS: Array[String] = [
 var _websocket_server
 var _command_processors = []
 var _enhanced_processor = null
+const MAX_MUTATION_QUEUE := 64
+# Read-only diagnostics/inspection commands intentionally bypass this queue so
+# async_diagnostics and concurrent reads remain responsive. Mutating commands
+# are admitted FIFO to avoid editor-state races. The drain loop awaits each
+# dispatch, so the next mutation cannot start until the current one has
+# finished (input sequences and editor scripts resolve on completion or their
+# deadline).
+# Rebuilt from the match arms in commands/*.gd and mcp_*_commands.gd; every
+# entry changes scene/files/editor/runtime state. Phantoms (simulate_input,
+# set_node_property, write_script, delete_script, write_shader,
+# save_all_scenes) were removed because no processor handles them; read-only
+# get_*/list_*/capture/subscribe commands stay concurrent by design.
+const MUTATING_COMMANDS := [
+	# Scene tree edits
+	"create_node", "delete_node", "update_node_property", "update_node_transform",
+	# Scene files and editor scene state
+	"create_scene", "save_scene", "open_scene", "delete_scene",
+	"reload_scene", "reload_project", "rescan_filesystem", "create_resource",
+	# Run control and generated project guidance files
+	"run_project", "run_current_scene", "run_specific_scene", "stop_running_project",
+	"generate_project_guidance",
+	# Script and shader files
+	"create_script", "edit_script", "create_shader", "edit_shader",
+	"shader_set_uniform", "shader_hot_reload", "shader_reset_uniforms",
+	"shader_reload_from_disk", "shader_debug_overlay", "shader_debug_visualize",
+	# Editor main-thread script execution
+	"execute_editor_script",
+	# Runtime input simulation
+	"simulate_action_press", "simulate_action_release", "simulate_action_tap",
+	"simulate_mouse_click", "simulate_mouse_move", "simulate_drag",
+	"simulate_key_press", "simulate_input_sequence",
+	# Editor panel state and arbitrary runtime evaluation
+	"clear_debug_output", "clear_editor_errors", "evaluate_runtime"
+]
+var _mutation_queue: Array = []
+var _mutation_worker_running := false
 
 func _ready():
 	print("Command handler initializing...")
@@ -121,6 +157,35 @@ func _try_load_optional_command(path: String) -> Node:
 	return null
 
 func _handle_command(client_id: int, command: Dictionary) -> void:
+	var command_type = str(command.get("type", ""))
+	if command_type in MUTATING_COMMANDS:
+		_enqueue_mutation(client_id, command)
+		return
+	await _dispatch_command(client_id, command)
+
+func _enqueue_mutation(client_id: int, command: Dictionary) -> void:
+	if _mutation_queue.size() >= MAX_MUTATION_QUEUE:
+		_send_error(client_id, "Mutation queue is full (limit %d); retry after existing editor work completes" % MAX_MUTATION_QUEUE, str(command.get("commandId", "")))
+		return
+	_mutation_queue.append({"client_id": client_id, "command": command})
+	if not _mutation_worker_running:
+		call_deferred("_drain_mutation_queue")
+
+func _drain_mutation_queue() -> void:
+	if _mutation_worker_running:
+		return
+	_mutation_worker_running = true
+	while not _mutation_queue.is_empty():
+		var item: Dictionary = _mutation_queue.pop_front()
+		await _dispatch_command(int(item.get("client_id", 0)), item.get("command", {}))
+	_mutation_worker_running = false
+
+func remove_client_commands(client_id: int) -> void:
+	for index in range(_mutation_queue.size() - 1, -1, -1):
+		if int(_mutation_queue[index].get("client_id", -1)) == client_id:
+			_mutation_queue.remove_at(index)
+
+func _dispatch_command(client_id: int, command: Dictionary) -> void:
 	var command_type = command.get("type", "")
 	var params = command.get("params", {})
 	var command_id = command.get("commandId", "")
@@ -162,6 +227,8 @@ func _processor_requires_await(processor: Node) -> bool:
 	if processor is MCPDebuggerCommands:
 		return true
 	if processor is MCPInputCommands:
+		return true
+	if processor is MCPEditorScriptCommands:
 		return true
 	if processor is MCPCaptureCommands:
 		return true

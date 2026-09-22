@@ -79,13 +79,15 @@ Runtime list results contain `materials` and `count`; uniform reads contain `nod
 | `reload_scene` | Reload scene from disk | `--scene-path` (optional) |
 | `rescan_filesystem` | Rescan for file changes | (none) |
 | `generate_project_guidance` | Scan the project and write AI guidance files | `--include-agents-md`, `--force` |
+| `batch_operations` | Run up to 25 existing tools in order; non-atomic, no rollback; a failed/invalid batch fails the tool call with the report embedded | `--operations` (JSON), `--dry-run`, `--continue-on-error` |
+| `playtest` | Launch/attach, wait for runtime inspection, apply input phases, assert state, and optionally capture failures | `--launch`, `--phases` (JSON), `--stop-after`, `--capture-on-failure` |
 
 ## Asset Tools
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `list_assets_by_type` | List assets | `--type` (scripts/scenes/images/audio/fonts/models/shaders/resources/all) |
-| `list_project_files` | List files by extension | `--extensions` |
+| `list_assets_by_type` | List a bounded page of assets | `--type`, `--offset`, `--limit` (default 200, max 1000); `scan_truncated` flags a capped scan |
+| `list_project_files` | List a bounded page of files by extension | `--extensions`, `--offset`, `--limit` (default 200, max 1000); `scan_truncated` flags a capped scan |
 
 ## Debugger Tools
 
@@ -127,7 +129,7 @@ Requires a running game (F5).
 | `get_editor_scene_structure` | Editor scene tree | `--include-properties`, `--include-scripts`, `--max-depth` |
 | `get_runtime_scene_structure` | Runtime scene tree | `--include-properties`, `--max-depth`, `--timeout-ms` |
 | `evaluate_runtime_expression` | Evaluate expression in game | `--expression`, `--context-path`, `--timeout-ms` |
-| `execute_editor_script` | Run GDScript in editor | `--code` |
+| `execute_editor_script` | Run arbitrary GDScript in the editor (explicit unsafe opt-in; main-thread execution cannot be preempted) | `--code`, `--allow-unsafe true` |
 
 ## Editor Tools
 
@@ -140,7 +142,9 @@ Requires a running game (F5).
 | `get_node_warnings` | Inspect current scene tree for configuration warnings | `--debug` |
 | `get_stack_trace_panel` | Get stack trace | `--session-id` |
 | `get_stack_frames_panel` | Get stack frames | `--session-id`, `--refresh` |
-| `stream_debug_output` | Start/stop log stream | `--action` (start/stop) |
+| `stream_debug_output` | Bounded protocol-safe debug stream; asynchronous frames never print to stdout | `--action` (start/read/capture/stop), `--after-cursor`, `--duration-ms` |
+
+`batch_operations` dry-run validates allowlists and Zod schemas only; it does not check Godot runtime preconditions, and dry-run reports are returned normally even when entries are invalid. Outside dry run, any failed or invalid operation makes the tool call itself fail with the compact JSON report embedded in the error (bounded to 8 KiB); there is no rollback either way. File and asset scans stop at a 100000-entry cap and set `scan_truncated`; a requested offset past the end of the results is reported explicitly. `playtest` reports unavailable runtime/evaluation bridges, thrown inspections, and unavailable or truncated runtime snapshots as infrastructure errors rather than passing assertions; a cleanup failure forces `passed: false`. Mutation commands are dispatched one at a time through the bounded FIFO and the next mutation waits for the current one (including input sequences and `execute_editor_script`) to finish or hit its deadline.
 
 ## MCP Resources
 

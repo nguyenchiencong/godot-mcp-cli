@@ -51,6 +51,7 @@ func _enter_tree():
 		# Connect signals
 		print("Connecting command handler signals...")
 		websocket_server.connect("command_received", Callable(command_handler, "_handle_command"))
+		websocket_server.connect("client_disconnected", Callable(command_handler, "remove_client_commands"))
 	else:
 		printerr("Failed to load command handler script!")
 

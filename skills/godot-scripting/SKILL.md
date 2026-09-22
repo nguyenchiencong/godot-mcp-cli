@@ -52,10 +52,10 @@ Shader authoring writes return editor compile diagnostics; `shader_get_compile_e
 ### Run arbitrary GDScript in the editor
 
 ```bash
-godot-mcp execute_editor_script --code "print(get_tree().current_scene.name)"
+godot-mcp execute_editor_script --code "print(get_tree().current_scene.name)" --allow-unsafe true
 ```
 
-Useful for batch operations the dedicated tools do not cover (groups, signals, project settings).
+Useful for batch operations the dedicated tools do not cover (groups, signals, project settings). This is explicitly unsafe: code runs on the editor main thread with project filesystem access, and a response deadline cannot preempt a blocked script.
 
 ### Read scripts as MCP resources
 

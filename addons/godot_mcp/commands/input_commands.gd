@@ -18,33 +18,36 @@ func _get_runtime_bridge() -> MCPRuntimeDebuggerBridge:
 
 
 func process_command(client_id: int, command_type: String, params: Dictionary, command_id: String) -> bool:
+	# Every handler waits on the runtime bridge, so process_command must await
+	# it: dispatch (and therefore the mutation queue) resolves only after the
+	# input sequence has actually finished or timed out.
 	match command_type:
 		"simulate_action_press":
-			_handle_action_press(client_id, params, command_id)
+			await _handle_action_press(client_id, params, command_id)
 			return true
 		"simulate_action_release":
-			_handle_action_release(client_id, params, command_id)
+			await _handle_action_release(client_id, params, command_id)
 			return true
 		"simulate_action_tap":
-			_handle_action_tap(client_id, params, command_id)
+			await _handle_action_tap(client_id, params, command_id)
 			return true
 		"simulate_mouse_click":
-			_handle_mouse_click(client_id, params, command_id)
+			await _handle_mouse_click(client_id, params, command_id)
 			return true
 		"simulate_mouse_move":
-			_handle_mouse_move(client_id, params, command_id)
+			await _handle_mouse_move(client_id, params, command_id)
 			return true
 		"simulate_drag":
-			_handle_drag(client_id, params, command_id)
+			await _handle_drag(client_id, params, command_id)
 			return true
 		"simulate_key_press":
-			_handle_key_press(client_id, params, command_id)
+			await _handle_key_press(client_id, params, command_id)
 			return true
 		"simulate_input_sequence":
-			_handle_input_sequence(client_id, params, command_id)
+			await _handle_input_sequence(client_id, params, command_id)
 			return true
 		"get_input_actions":
-			_handle_get_input_actions(client_id, params, command_id)
+			await _handle_get_input_actions(client_id, params, command_id)
 			return true
 	
 	return false

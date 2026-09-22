@@ -86,10 +86,12 @@ The live shader debugging loop (snapshots, uniform tweaks, frame capture, hot re
 
 ```bash
 godot-mcp stream_debug_output --action start
+godot-mcp stream_debug_output --action read --after-cursor 0
+godot-mcp stream_debug_output --action capture --duration-ms 1500 --raw
 godot-mcp stream_debug_output --action stop
 ```
 
-New Output panel lines arrive as `[Godot Debug] ...` while streaming.
+Output frames are retained in a bounded cursor buffer and returned by `read` or one-shot `capture`; asynchronous frames are never printed to stdout, preserving MCP framing. Use the returned `next_cursor` for the next read.
 
 Session handling: `debugger_get_call_stack --session-id 1` addresses a specific debug session (multiple sessions are supported); only one client can receive debugger events at a time.
 

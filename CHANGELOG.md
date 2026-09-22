@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+- `batch_operations` tool: ordered, explicitly non-atomic batches of up to 25 existing tools with schema-only `dry_run`, optional `continue_on_error`, and bounded per-operation results; a non-dry-run batch containing any failed or invalid operation fails the tool call with the compact JSON report embedded; no rollback or undo is claimed
+- `playtest` tool: bounded launch/attach, readiness polling, ordered input phases, runtime node/expression assertions, optional failure capture, and cleanup; unavailable runtime/eval bridges are reported as infrastructure errors, not passing assertions
+- `stream_debug_output` `read`/`capture` actions backed by a bounded cursor buffer (1,000 lines / 128 KiB) with truncation metadata; the existing global CLI `--raw` flag displays the full MCP result envelope
+- Offset pagination (`offset`/`limit`, default 200, maximum 1000) with `truncated`/`next_offset` metadata for `list_assets_by_type`, `list_project_files`, and project resources
+- Mock transport benchmark: `npm run benchmark:transport` (loopback echo server; does not measure Godot or editor frame cost)
+- Live-editor benchmark: `npm run benchmark:live` runs sequential read, read-during-burst, mutation completion-order, and debug-stream capture cases end to end against a dedicated headless fixture editor spawned in a throwaway temp project on a free port; results are labeled headless/no-rendering and make no GPU or frame-cost claim
+- Live queue-completion regression test `server/tests/mutation_queue.live.test.js` (editor-required, outside `test:offline`): a slow mutation finishes before the immediately following mutation, and a 10-deep editor-script burst completes in submission order
+- `GODOT_MCP_PORT` environment variable (integer 1024-65535, fallback 9080) overrides the plugin's WebSocket listen port, so a dedicated fixture editor can run alongside an editor that already owns 9080; the server/CLI client resolves the same variable so plugin and client stay on the same port
+
+### Changed
+- MCP startup now awaits FastMCP `start()` with an idempotent shutdown path; the CLI reports connection and tool-call deadlines as separate phases and no longer implies Godot work is cancelled on timeout
+- `execute_editor_script` requires explicit `allow_unsafe: true` (enforced in both the tool schema and the Godot-side command); output is bounded and timeout wording states main-thread execution cannot be preempted
+- Transport bounds: 8 MiB WebSocket message ceilings on both sides, 64-entry pending-command limit with early rejection, per-peer 256 queued packets, 16 packets per peer per frame; mutation commands are admitted through a bounded FIFO and dispatched one at a time — the next mutation waits for the current one (including input sequences and `execute_editor_script`) to finish or hit its deadline — while read-only diagnostics remain concurrent
+
+### Fixed
+- `stream_debug_output` no longer prints asynchronous `[Godot Debug]` lines to server stdout, which could corrupt MCP stdio framing
+- Manual WebSocket `stop_server` now emits `client_disconnected` so debug-output subscribers are cleaned up on stop/restart
+
 ## 1.6.0 - 2026-09-04
 
 ### Added

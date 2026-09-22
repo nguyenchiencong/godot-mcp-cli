@@ -4,6 +4,8 @@
 export.cfg
 export_presets.cfg
 scripts/
+# Node release tooling lives in server/scripts (see npm run release:*)
+!server/scripts/
 shaders/
 scenes/
 shapes/

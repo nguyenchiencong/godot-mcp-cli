@@ -22,6 +22,13 @@
 - **Mock client transport:** `cd server && npm run build && npm run benchmark:transport` (optional `-- --duration-ms 2000`). Uses an ephemeral loopback peer, not Godot; reports post-change latency/throughput and GC-dependent heap samples, not editor frame cost or speedup. See [verification record](../testing/approved-optimization.md).
 - **Live headless editor:** `cd server && npm run build && npm run benchmark:live`. Spawns a dedicated temporary fixture editor on a free `GODOT_MCP_PORT` port (never touches a user's editor; fixture is deleted afterwards) and measures sequential reads, read-during-burst, mutation completion order, and debug-stream capture end to end. Labeled headless/no-rendering — does not measure GPU or rendering frame cost. Results: [verification record](../testing/approved-optimization.md).
 
+## Releases
+- Commit everything first: `npm version` refuses to run on a dirty tree (release hygiene — the release commit must contain exactly the synced release state).
+- From `server/`, run `npm run release:minor` (or `release:patch` / `release:major`).
+- The `version` lifecycle hook runs `scripts/bump-version.mjs`, which syncs the `version` constant in `src/index.ts`, both version fields in `package-lock.json` (top-level and `packages[""]`), and replaces the first `## Unreleased` heading in the root `CHANGELOG.md` with `## <version> - <YYYY-MM-DD>`. `server/package.json` is owned by `npm version` itself; the tool never touches it.
+- `npm version` then commits `chore: Release v<version>` and creates the `v<version>` tag (no push — push tags/commits manually: `git push && git push --tags`).
+- Standalone sync (no commit/tag): `node scripts/bump-version.mjs --set <x.y.z>` from anywhere; requires an existing `## Unreleased` CHANGELOG heading.
+
 ## Godot editor
 - **Binary:** `D:\Godot\GodotEngine\godot.exe`
 - **Open project:** `godot.exe --path <project> --editor`

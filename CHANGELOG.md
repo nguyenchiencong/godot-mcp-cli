@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 ### Added
+- npm release tooling: `npm run release:patch|minor|major` from `server/` wraps `npm version` (commits `chore: Release v<version>`, tags `v<version>`); the `version` lifecycle hook runs `server/scripts/bump-version.mjs` to sync the `src/index.ts` version constant, `package-lock.json` (both version fields — fixing the 1.5.1 drift), and the CHANGELOG `Unreleased` heading
 - `batch_operations` tool: ordered, explicitly non-atomic batches of up to 25 existing tools with schema-only `dry_run`, optional `continue_on_error`, and bounded per-operation results; a non-dry-run batch containing any failed or invalid operation fails the tool call with the compact JSON report embedded; no rollback or undo is claimed
 - `playtest` tool: bounded launch/attach, readiness polling, ordered input phases, runtime node/expression assertions, optional failure capture, and cleanup; unavailable runtime/eval bridges are reported as infrastructure errors, not passing assertions
 - `stream_debug_output` `read`/`capture` actions backed by a bounded cursor buffer (1,000 lines / 128 KiB) with truncation metadata; the existing global CLI `--raw` flag displays the full MCP result envelope

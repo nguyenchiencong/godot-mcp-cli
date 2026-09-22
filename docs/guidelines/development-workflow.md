@@ -24,3 +24,4 @@ Standard flow for a change in this project.
 6. **Verify:** `git diff --check` clean; Godot editor error panel clean (ignore
    the known `test_debugger.gd:14` unused-parameter warning).
 7. **Commit** with a clear message; open a PR against `main`.
+   Version bumps go through the release flow (`npm run release:patch|minor|major` from `server/`) — see [suggested-commands.md](suggested-commands.md#releases).

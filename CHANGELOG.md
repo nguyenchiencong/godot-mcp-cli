@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## 1.7.0 - 2026-09-23
 
 ### Added
 - npm release tooling: `npm run release:patch|minor|major` from `server/` wraps `npm version` (commits `chore: Release v<version>`, tags `v<version>`); the `version` lifecycle hook runs `server/scripts/bump-version.mjs` to sync the `src/index.ts` version constant, `package-lock.json` (both version fields — fixing the 1.5.1 drift), and the CHANGELOG `Unreleased` heading

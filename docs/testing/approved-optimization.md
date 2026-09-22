@@ -1,6 +1,6 @@
 # Approved optimization implementation record
 
-Status: implemented in working tree; no commit made.
+Status: implemented and verified; subsequently committed as c20c27e (main changeset), b187828 (skills), and 6df9e3a (release tooling). The 1.7.0 release state (version syncs + this CHANGELOG promotion) was produced via the release tooling and is prepared for the release commit.
 
 ## Delivered
 
